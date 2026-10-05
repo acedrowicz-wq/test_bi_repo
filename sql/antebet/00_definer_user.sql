@@ -9,7 +9,7 @@
 -- the replication of slot_actions and every aggregate built on it.
 --
 -- HOST NONE: nobody can log in as this user, it is used only as a definer.
--- Password: generate a random one (e.g. `openssl rand -base64 32`), paste it
+-- Password: a random one; ProdCH requires at least 1 uppercase letter and 1 special character; paste it
 -- and do not save it anywhere; it is never needed.
 
 CREATE USER IF NOT EXISTS bi_antebet_definer
