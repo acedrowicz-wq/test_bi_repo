@@ -2,7 +2,7 @@
 
 | Step | File | How to run it | When |
 |---|---|---|---|
-| 0 | — | check permissions (below), test on StagePlatformCH | before anything else |
+| 0 | `00_definer_user.sql` | SQL console | before anything else (optionally test it all on StagePlatformCH first) |
 | 1 | `01_tables.sql` | SQL console / `clickhouse client` | any time |
 | 2 | `02_incremental_mvs.sql` | SQL console / `clickhouse client` | **before** `<CUTOFF>` |
 | 3+4 | `03_backfill_rounds.sql`, `04_backfill_report.sql` | `./run_backfill.sh '<CUTOFF>'` | **after** `<CUTOFF>` + 15 min |
@@ -13,14 +13,13 @@
 It is now `2026-10-05 22:00:00`. If you create the MVs later, change it in both places in `02_incremental_mvs.sql`.
 
 ## Permissions (step 0)
-The user who creates the objects needs: `CREATE DATABASE` (or an existing `adam_sandbox`),
-`CREATE TABLE / VIEW` on `adam_sandbox.*`, `SELECT` on `platform.slot_actions`,
-`platform.mysql_slot_actions_extra`, `dictGet` on `platform.currency_d` and `platform.whitelabels_d`.
-The MVs run as their creator (SQL SECURITY DEFINER), so these permissions have to stay in place.
+The account that creates the objects needs CREATE, SELECT, INSERT, dictGet, CREATE USER and
+SET DEFINER (all of these are in the console grants of a.cedrowicz, WITH GRANT OPTION).
+All MVs run as `bi_antebet_definer` (`00_definer_user.sql`), not as the creator:
+the console JWT user is not a permanent account, and an error in an MV on `platform.slot_actions`
+would stop PeerDB replication (`mysql_slot_actions_mv` -> `slot_actions`).
 
-```sql
-SHOW GRANTS;
-```
+The Tableau account must have `SELECT ON adam_sandbox.*` (the `bi_antebet_report_v` view runs as the reader).
 
 ## Running from the terminal
 ```bash
@@ -32,6 +31,9 @@ clickhouse client --host $CH_HOST --secure --user $CH_USER --password $CH_PASSWO
 clickhouse client --host $CH_HOST --secure --user $CH_USER --password $CH_PASSWORD --queries-file 05_refreshable_mvs_and_view.sql
 ```
 Your IP must be on the ProdCH IP Access List (e.g. through WARP VPN).
+The SQL console login (JWT) does not work in `clickhouse client`: for the terminal, use credentials
+from Vault (like the `v-oidc-*` users) or another password-based account with SELECT/INSERT on `adam_sandbox.*`
+and SELECT on the `platform` sources. Steps 0, 1, 2 and 5 can just as well be run in the SQL console.
 
 ## Checks
 ```sql
@@ -56,5 +58,6 @@ DROP VIEW IF EXISTS adam_sandbox.bi_antebet_rounds_extra_mv;
 DROP VIEW IF EXISTS adam_sandbox.bi_antebet_mv;
 DROP VIEW IF EXISTS adam_sandbox.bi_antebet_recent_mv;
 DROP VIEW IF EXISTS adam_sandbox.bi_antebet_report_v;
+-- DROP USER IF EXISTS bi_antebet_definer;   -- only after the MVs are dropped
 -- then optionally the tables: bi_antebet_rounds, bi_antebet_report, bi_antebet_report_recent
 ```

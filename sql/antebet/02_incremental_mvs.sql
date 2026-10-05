@@ -12,6 +12,7 @@
 -- ---------------------------------------------------------------------
 CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_rounds_mv
 TO adam_sandbox.bi_antebet_rounds
+DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 SELECT
     toDate(toTimezone(createdAt, 'Europe/Warsaw')) AS action_date,
@@ -45,6 +46,7 @@ GROUP BY action_date, roundNumId, playerMongoId;
 -- ---------------------------------------------------------------------
 CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_rounds_extra_mv
 TO adam_sandbox.bi_antebet_rounds
+DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 SELECT
     action_date,

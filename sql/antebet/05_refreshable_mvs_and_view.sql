@@ -12,6 +12,7 @@
 CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_mv
 REFRESH EVERY 1 DAY OFFSET 1 HOUR
 APPEND TO adam_sandbox.bi_antebet_report
+DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDate(now(), 'Europe/Warsaw')                                                       AS today,
@@ -71,6 +72,7 @@ SETTINGS max_bytes_before_external_group_by = 8000000000;
 CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_recent_mv
 REFRESH EVERY 15 MINUTE
 TO adam_sandbox.bi_antebet_report_recent
+DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDate(now(), 'Europe/Warsaw')                                                       AS today,
