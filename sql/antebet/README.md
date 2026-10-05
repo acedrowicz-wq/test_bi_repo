@@ -7,7 +7,7 @@ You run everything ONCE, in the SQL console, before `<CUTOFF>` (now `2026-10-05 
 |---|---|---|
 | new rounds | `bi_antebet_rounds_mv`, `bi_antebet_rounds_extra_mv` | on every insert (real time) |
 | history 20.08 -> 05.10 | `bi_antebet_backfill_mv` | 1 day/min, starts by itself at 22:15 UTC, done after ~1 h |
-| closed days | `bi_antebet_mv` -> `bi_antebet_report` | every 15 min (history ~2 h after the backfill, then +1 day after midnight) |
+| closed days | `bi_antebet_mv` -> `bi_antebet_report` | every 15 min (history ~4 h after the backfill, then +1 day after midnight) |
 | today + yesterday | `bi_antebet_recent_mv` -> `bi_antebet_report_recent` | every 15 min |
 | Tableau | `bi_antebet_report_v` | — |
 
