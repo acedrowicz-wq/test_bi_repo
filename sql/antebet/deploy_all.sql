@@ -72,7 +72,7 @@ SELECT
     ''                                              AS bonus_type
 FROM platform.slot_actions
 WHERE status IN ('COMPLETED', 'FINALIZED')
-  AND createdAt >= '2026-10-05 22:00:00'
+  AND createdAt >= '2026-10-05 16:00:00'
 GROUP BY action_date, roundNumId, playerMongoId;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_rounds_extra_mv
@@ -105,7 +105,7 @@ FROM
     FROM platform.mysql_slot_actions_extra
     WHERE _peerdb_is_deleted = 0
       AND actionName IN ('spin', 'buy_spin')
-      AND createdAt >= '2026-10-05 22:00:00'
+      AND createdAt >= '2026-10-05 16:00:00'
 )
 WHERE ante_bet > 0 OR bonus_type != '';
 
@@ -115,13 +115,18 @@ APPEND TO bi_sandbox.bi_antebet_rounds
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
-    toDateTime('2026-10-05 22:00:00', 'UTC')                                    AS cutoff,
+    toDateTime('2026-10-05 16:00:00', 'UTC')                                    AS cutoff,
     toDate('2026-08-20')                                                        AS start_day,
-    ifNull((SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds), toDate('1970-01-01')) AS min_day,
-    min_day - 1                                                                 AS d,
+    toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
+    ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
+            WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,
+    (SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds
+     WHERE action_date < cutoff_day)                                            AS hist_min_raw,
+    if(hist_min_raw IS NULL OR hist_min_raw = toDate('1970-01-01'), cutoff_day, assumeNotNull(hist_min_raw)) AS hist_min,
+    if(cutoff_day_done, hist_min - 1, cutoff_day)                               AS d,
     toDateTime(d, 'Europe/Warsaw')                                              AS ts_from,
     least(toDateTime(d + 1, 'Europe/Warsaw'), cutoff)                           AS ts_to,
-    now() >= cutoff + INTERVAL 15 MINUTE AND min_day > start_day                AS active
+    now() >= cutoff + INTERVAL 15 MINUTE AND d >= start_day                     AS active
 SELECT
     d                                AS action_date,
     roundNumId,
@@ -147,13 +152,18 @@ GROUP BY roundNumId, playerMongoId
 UNION ALL
 
 WITH
-    toDateTime('2026-10-05 22:00:00', 'UTC')                                    AS cutoff,
+    toDateTime('2026-10-05 16:00:00', 'UTC')                                    AS cutoff,
     toDate('2026-08-20')                                                        AS start_day,
-    ifNull((SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds), toDate('1970-01-01')) AS min_day,
-    min_day - 1                                                                 AS d,
+    toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
+    ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
+            WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,
+    (SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds
+     WHERE action_date < cutoff_day)                                            AS hist_min_raw,
+    if(hist_min_raw IS NULL OR hist_min_raw = toDate('1970-01-01'), cutoff_day, assumeNotNull(hist_min_raw)) AS hist_min,
+    if(cutoff_day_done, hist_min - 1, cutoff_day)                               AS d,
     toDateTime(d, 'Europe/Warsaw')                                              AS ts_from,
     least(toDateTime(d + 1, 'Europe/Warsaw'), cutoff)                           AS ts_to,
-    now() >= cutoff + INTERVAL 15 MINUTE AND min_day > start_day                AS active
+    now() >= cutoff + INTERVAL 15 MINUTE AND d >= start_day                     AS active
 SELECT
     d                                            AS action_date,
     roundNumId,
@@ -196,14 +206,14 @@ WHERE ante_bet > 0 OR bonus_type != ''
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_mv
-REFRESH EVERY 15 MINUTE
+REFRESH EVERY 5 MINUTE
 APPEND TO bi_sandbox.bi_antebet_report
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDate('2026-08-20')                                                                          AS start_day,
     toDate(now(), 'Europe/Warsaw')                                                                AS today,
-    (SELECT countIf(action_date <= start_day) > 0 FROM bi_sandbox.bi_antebet_rounds)            AS backfill_done,
+    ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds WHERE action_date = start_day), 0) AS backfill_done,
     greatest(ifNull((SELECT max(report_date) FROM bi_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, start_day) AS date_from,
     if(backfill_done, least(date_from + 2, today - 2), date_from - 1)                             AS date_to
 SELECT
@@ -238,7 +248,8 @@ FROM
         max(ante_bet)    AS ante_bet_multiplier,
         max(bonus_type)  AS raw_bonus_type
     FROM bi_sandbox.bi_antebet_rounds
-    WHERE action_date BETWEEN date_from - 1 AND date_to + 1
+    WHERE date_to >= date_from
+      AND action_date BETWEEN date_from - 1 AND date_to + 1
     GROUP BY roundNumId, playerMongoId
     HAVING sum(actions_cnt) > 0
        AND report_date BETWEEN date_from AND date_to

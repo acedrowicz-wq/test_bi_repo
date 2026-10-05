@@ -1,19 +1,17 @@
 -- Step 3. Automatic round backfill for history (period before <CUTOFF>).
 --
--- A refreshable MV that does ONE Warsaw day per run, going backwards
--- from <CUTOFF> to start_day:
---   next day = min(action_date) in bi_antebet_rounds - 1
--- The incremental MVs (step 2) start writing at <CUTOFF> (= a Warsaw
--- midnight), so the first day done is the day before <CUTOFF>, then the one
--- before that, and so on. It starts on its own 15 min after <CUTOFF> (PeerDB lag).
--- One day takes ~45-60 s, so it runs every minute; 47 days take ~1 h.
--- After it reaches start_day, every run does nothing (cost ~0); you
--- can drop it, but you do not have to.
+-- A refreshable MV that does ONE Warsaw day per run, going backwards:
+--   1st run: the day of <CUTOFF>, from Warsaw midnight up to <CUTOFF>
+--            (the incremental MVs from step 2 write from <CUTOFF> onwards),
+--   then:    min(action_date) of days before the <CUTOFF> day - 1, down to start_day.
+-- "The <CUTOFF> day is done" = there are rows for that day with first_action_at < <CUTOFF>
+-- (rows from the incremental MVs have first_action_at >= <CUTOFF> or NULL).
+-- It starts on its own 15 min after <CUTOFF> (PeerDB lag). One day takes ~45-60 s,
+-- so it runs every minute; 47 days take ~1 h. After that every run does nothing.
 --
--- action_date is set to the processed day d (not computed from createdAt),
--- so "min(action_date)" moves exactly one day per run.
--- Repair if any day loaded with an error (see README, "Checks"):
---   DELETE FROM bi_sandbox.bi_antebet_rounds WHERE action_date <= '<bad day>';
+-- action_date is set to the processed day d (not computed from createdAt).
+-- Repair if any day D (< the <CUTOFF> day) loaded with an error:
+--   DELETE FROM bi_sandbox.bi_antebet_rounds WHERE action_date <= 'D';
 -- and the MV will reload that day and all earlier days by itself.
 --
 -- <CUTOFF> and start_day must be identical in BOTH branches of the UNION
@@ -26,13 +24,18 @@ DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 -- (a) slot_actions: amounts and dimensions
 WITH
-    toDateTime('2026-10-05 22:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
+    toDateTime('2026-10-05 16:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
     toDate('2026-08-20')                                                        AS start_day,
-    ifNull((SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds), toDate('1970-01-01')) AS min_day,
-    min_day - 1                                                                 AS d,
+    toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
+    ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
+            WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,
+    (SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds
+     WHERE action_date < cutoff_day)                                            AS hist_min_raw,
+    if(hist_min_raw IS NULL OR hist_min_raw = toDate('1970-01-01'), cutoff_day, assumeNotNull(hist_min_raw)) AS hist_min,
+    if(cutoff_day_done, hist_min - 1, cutoff_day)                               AS d,
     toDateTime(d, 'Europe/Warsaw')                                              AS ts_from,
     least(toDateTime(d + 1, 'Europe/Warsaw'), cutoff)                           AS ts_to,
-    now() >= cutoff + INTERVAL 15 MINUTE AND min_day > start_day                AS active
+    now() >= cutoff + INTERVAL 15 MINUTE AND d >= start_day                     AS active
 SELECT
     d                                AS action_date,
     roundNumId,
@@ -59,13 +62,18 @@ UNION ALL
 
 -- (b) mysql_slot_actions_extra: ante_bet / bonus_type of the bet actions from the same day
 WITH
-    toDateTime('2026-10-05 22:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
+    toDateTime('2026-10-05 16:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
     toDate('2026-08-20')                                                        AS start_day,
-    ifNull((SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds), toDate('1970-01-01')) AS min_day,
-    min_day - 1                                                                 AS d,
+    toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
+    ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
+            WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,
+    (SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds
+     WHERE action_date < cutoff_day)                                            AS hist_min_raw,
+    if(hist_min_raw IS NULL OR hist_min_raw = toDate('1970-01-01'), cutoff_day, assumeNotNull(hist_min_raw)) AS hist_min,
+    if(cutoff_day_done, hist_min - 1, cutoff_day)                               AS d,
     toDateTime(d, 'Europe/Warsaw')                                              AS ts_from,
     least(toDateTime(d + 1, 'Europe/Warsaw'), cutoff)                           AS ts_to,
-    now() >= cutoff + INTERVAL 15 MINUTE AND min_day > start_day                AS active
+    now() >= cutoff + INTERVAL 15 MINUTE AND d >= start_day                     AS active
 SELECT
     d                                            AS action_date,
     roundNumId,

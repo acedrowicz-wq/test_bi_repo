@@ -1,21 +1,21 @@
 # Antebet report on ClickHouse (ProdCH)
 
-You run everything ONCE, in the SQL console, before `<CUTOFF>` (now `2026-10-05 22:00:00` UTC
-= midnight Warsaw time on 06.10). After that everything works by itself:
+You run everything ONCE, in the SQL console, before `<CUTOFF>` (now `2026-10-05 16:00:00` UTC
+= 18:00 Warsaw time on 05.10). After that everything works by itself:
 
 | What | Object | How often |
 |---|---|---|
 | new rounds | `bi_antebet_rounds_mv`, `bi_antebet_rounds_extra_mv` | on every insert (real time) |
-| history 20.08 -> 05.10 | `bi_antebet_backfill_mv` | 1 day/min, starts by itself at 22:15 UTC, done after ~1 h |
-| closed days | `bi_antebet_mv` -> `bi_antebet_report` | every 15 min (history ~4 h after the backfill, then +1 day after midnight) |
+| history 20.08 -> 05.10 | `bi_antebet_backfill_mv` | 1 day/min, starts by itself at 16:15 UTC, done after ~1 h |
+| closed days | `bi_antebet_mv` -> `bi_antebet_report` | every 5 min (history ~1.5 h after the backfill, then +1 day after midnight) |
 | today + yesterday | `bi_antebet_recent_mv` -> `bi_antebet_report_recent` | every 15 min |
 | Tableau | `bi_antebet_report_v` | — |
 
 Files, in order: `00_definer_user.sql`, `01_tables.sql`, `02_incremental_mvs.sql`,
 `03_backfill_mv.sql`, `04_report_mvs_and_view.sql`.
 
-If you deploy after `<CUTOFF>`: change it to the next Warsaw midnight in UTC
-(22:00 in summer time, 23:00 from 25.10) in 02 (2 places) and 03 (2 places).
+If you deploy after `<CUTOFF>`: change it
+in 02 (2 places) and 03 (2 places) to any later moment (UTC).
 
 ## Checks
 ```sql

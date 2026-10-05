@@ -3,25 +3,25 @@
 
 -- ---------------------------------------------------------------------
 -- 2a. Closed days -> bi_antebet_report
---     Every 15 minutes it appends the next days after max(report_date)
+--     Every 5 minutes it appends the next days after max(report_date)
 --     in the table, at most 3 days per run, up to today-2 (rounds last
 --     at most ~22 h, so today-2 is already final).
 --     - Empty table: it starts from start_day (2026-08-20).
 --     - It does NOTHING until the round backfill has reached start_day
 --       (bi_antebet_rounds has rows with action_date <= start_day).
---     So the history fills itself in (~16 runs = ~4 h after the round
+--     So the history fills itself in (~16 runs = ~1.5 h after the round
 --     backfill), and then each day is appended once, by the first
 --     run after Warsaw midnight. A missed run catches up by itself.
 -- ---------------------------------------------------------------------
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_mv
-REFRESH EVERY 15 MINUTE
+REFRESH EVERY 5 MINUTE
 APPEND TO bi_sandbox.bi_antebet_report
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDate('2026-08-20')                                                                          AS start_day,
     toDate(now(), 'Europe/Warsaw')                                                                AS today,
-    (SELECT countIf(action_date <= start_day) > 0 FROM bi_sandbox.bi_antebet_rounds)            AS backfill_done,
+    ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds WHERE action_date = start_day), 0) AS backfill_done,
     greatest(ifNull((SELECT max(report_date) FROM bi_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, start_day) AS date_from,
     if(backfill_done, least(date_from + 2, today - 2), date_from - 1)                             AS date_to   -- date_to < date_from = nothing to do
 SELECT
@@ -56,7 +56,8 @@ FROM
         max(ante_bet)    AS ante_bet_multiplier,
         max(bonus_type)  AS raw_bonus_type
     FROM bi_sandbox.bi_antebet_rounds
-    WHERE action_date BETWEEN date_from - 1 AND date_to + 1   -- +-1 day: rounds that cross midnight
+    WHERE date_to >= date_from                                -- nothing to do = nothing is read
+      AND action_date BETWEEN date_from - 1 AND date_to + 1   -- +-1 day: rounds that cross midnight
     GROUP BY roundNumId, playerMongoId
     HAVING sum(actions_cnt) > 0                               -- the round must have a slot_actions part
        AND report_date BETWEEN date_from AND date_to

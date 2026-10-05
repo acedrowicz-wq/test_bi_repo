@@ -1,4 +1,4 @@
--- Step 2. Incremental MVs. <CUTOFF> (both places) = a Warsaw midnight LATER than the time you create them, written in UTC; the same as in 03_backfill_mv.sql.
+-- Step 2. Incremental MVs. <CUTOFF> (both places) = any moment LATER than the time you create them (UTC); the same as in 03_backfill_mv.sql.
 
 -- ---------------------------------------------------------------------
 -- 1a. MV: slot_actions -> rounds
@@ -31,7 +31,7 @@ SELECT
     ''                                              AS bonus_type
 FROM platform.slot_actions
 WHERE status IN ('COMPLETED', 'FINALIZED')
-  AND createdAt >= '2026-10-05 22:00:00'          -- <CUTOFF> (UTC) = 2026-10-06 00:00 Warsaw
+  AND createdAt >= '2026-10-05 16:00:00'          -- <CUTOFF> (UTC)
 GROUP BY action_date, roundNumId, playerMongoId;
 
 -- ---------------------------------------------------------------------
@@ -74,6 +74,6 @@ FROM
     FROM platform.mysql_slot_actions_extra
     WHERE _peerdb_is_deleted = 0
       AND actionName IN ('spin', 'buy_spin')
-      AND createdAt >= '2026-10-05 22:00:00'      -- <CUTOFF> (UTC), same as in 1a
+      AND createdAt >= '2026-10-05 16:00:00'      -- <CUTOFF> (UTC), same as in 1a
 )
 WHERE ante_bet > 0 OR bonus_type != '';
