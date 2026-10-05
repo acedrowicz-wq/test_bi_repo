@@ -24,7 +24,7 @@ GRANT dictGet ON platform.currency_d    TO bi_antebet_definer;
 GRANT dictGet ON platform.whitelabels_d TO bi_antebet_definer;
 -- target tables; CREATE/DROP TABLE because the refresh without APPEND
 -- builds a temporary table and swaps it with bi_antebet_report_recent
-GRANT SELECT, INSERT, CREATE TABLE, DROP TABLE, TRUNCATE ON adam_sandbox.* TO bi_antebet_definer;
+GRANT SELECT, INSERT, CREATE TABLE, DROP TABLE, TRUNCATE ON bi_sandbox.* TO bi_antebet_definer;
 
 -- check
 SHOW GRANTS FOR bi_antebet_definer;

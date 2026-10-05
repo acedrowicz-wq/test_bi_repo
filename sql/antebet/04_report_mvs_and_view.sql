@@ -13,16 +13,16 @@
 --     backfill), and then each day is appended once, by the first
 --     run after Warsaw midnight. A missed run catches up by itself.
 -- ---------------------------------------------------------------------
-CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_mv
+CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_mv
 REFRESH EVERY 15 MINUTE
-APPEND TO adam_sandbox.bi_antebet_report
+APPEND TO bi_sandbox.bi_antebet_report
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDate('2026-08-20')                                                                          AS start_day,
     toDate(now(), 'Europe/Warsaw')                                                                AS today,
-    (SELECT countIf(action_date <= start_day) > 0 FROM adam_sandbox.bi_antebet_rounds)            AS backfill_done,
-    greatest(ifNull((SELECT max(report_date) FROM adam_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, start_day) AS date_from,
+    (SELECT countIf(action_date <= start_day) > 0 FROM bi_sandbox.bi_antebet_rounds)            AS backfill_done,
+    greatest(ifNull((SELECT max(report_date) FROM bi_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, start_day) AS date_from,
     if(backfill_done, least(date_from + 2, today - 2), date_from - 1)                             AS date_to   -- date_to < date_from = nothing to do
 SELECT
     report_date,
@@ -55,7 +55,7 @@ FROM
         max(has_buy_spin) AS has_buy_spin,
         max(ante_bet)    AS ante_bet_multiplier,
         max(bonus_type)  AS raw_bonus_type
-    FROM adam_sandbox.bi_antebet_rounds
+    FROM bi_sandbox.bi_antebet_rounds
     WHERE action_date BETWEEN date_from - 1 AND date_to + 1   -- +-1 day: rounds that cross midnight
     GROUP BY roundNumId, playerMongoId
     HAVING sum(actions_cnt) > 0                               -- the round must have a slot_actions part
@@ -75,14 +75,14 @@ SETTINGS max_bytes_before_external_group_by = 8000000000;
 --     and atomically replaces the table (no APPEND). That way a round whose
 --     category changes (extra arrived later) leaves no stale rows behind.
 -- ---------------------------------------------------------------------
-CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_recent_mv
+CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_recent_mv
 REFRESH EVERY 15 MINUTE
-TO adam_sandbox.bi_antebet_report_recent
+TO bi_sandbox.bi_antebet_report_recent
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDate(now(), 'Europe/Warsaw')                                                       AS today,
-    greatest(ifNull((SELECT max(report_date) FROM adam_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, today - 3) AS date_from,
+    greatest(ifNull((SELECT max(report_date) FROM bi_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, today - 3) AS date_from,
     today                                                                                AS date_to
 SELECT
     report_date,
@@ -115,7 +115,7 @@ FROM
         max(has_buy_spin) AS has_buy_spin,
         max(ante_bet)    AS ante_bet_multiplier,
         max(bonus_type)  AS raw_bonus_type
-    FROM adam_sandbox.bi_antebet_rounds
+    FROM bi_sandbox.bi_antebet_rounds
     WHERE action_date >= date_from - 1
     GROUP BY roundNumId, playerMongoId
     HAVING sum(actions_cnt) > 0
@@ -131,11 +131,11 @@ SETTINGS max_bytes_before_external_group_by = 8000000000;
 -- ---------------------------------------------------------------------
 -- 3. View for Tableau
 -- ---------------------------------------------------------------------
-CREATE OR REPLACE VIEW adam_sandbox.bi_antebet_report_v AS
+CREATE OR REPLACE VIEW bi_sandbox.bi_antebet_report_v AS
 SELECT * EXCEPT refreshed_at
-FROM adam_sandbox.bi_antebet_report
-WHERE report_date <= (SELECT max(report_date) FROM adam_sandbox.bi_antebet_report)
+FROM bi_sandbox.bi_antebet_report
+WHERE report_date <= (SELECT max(report_date) FROM bi_sandbox.bi_antebet_report)
 UNION ALL
 SELECT * EXCEPT refreshed_at
-FROM adam_sandbox.bi_antebet_report_recent
-WHERE report_date > (SELECT max(report_date) FROM adam_sandbox.bi_antebet_report);
+FROM bi_sandbox.bi_antebet_report_recent
+WHERE report_date > (SELECT max(report_date) FROM bi_sandbox.bi_antebet_report);

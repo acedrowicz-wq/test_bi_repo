@@ -21,28 +21,28 @@ If you deploy after `<CUTOFF>`: change it to the next Warsaw midnight in UTC
 ```sql
 -- refresh status (exception = error)
 SELECT view, status, last_success_time, next_refresh_time, exception
-FROM system.view_refreshes WHERE database = 'adam_sandbox';
+FROM system.view_refreshes WHERE database = 'bi_sandbox';
 
 -- backfill progress: rows per day
 SELECT action_date, sum(actions_cnt) actions, count() rows
-FROM adam_sandbox.bi_antebet_rounds GROUP BY action_date ORDER BY action_date;
+FROM bi_sandbox.bi_antebet_rounds GROUP BY action_date ORDER BY action_date;
 
 -- report
 SELECT report_date, sum(total_rounds), sum(total_bet_amount), sum(total_win)
-FROM adam_sandbox.bi_antebet_report_v GROUP BY report_date ORDER BY report_date DESC;
+FROM bi_sandbox.bi_antebet_report_v GROUP BY report_date ORDER BY report_date DESC;
 ```
 Repairing a bad backfill day D:
-`DELETE FROM adam_sandbox.bi_antebet_rounds WHERE action_date <= 'D';` and the MV reloads it by itself
-(if bi_antebet_report already has those days: also `DELETE FROM adam_sandbox.bi_antebet_report WHERE report_date >= 'D' - 1;`).
+`DELETE FROM bi_sandbox.bi_antebet_rounds WHERE action_date <= 'D';` and the MV reloads it by itself
+(if bi_antebet_report already has those days: also `DELETE FROM bi_sandbox.bi_antebet_report WHERE report_date >= 'D' - 1;`).
 
 ## Rollback (MVs first: they sit on the production insert path)
 ```sql
-DROP VIEW IF EXISTS adam_sandbox.bi_antebet_rounds_mv;
-DROP VIEW IF EXISTS adam_sandbox.bi_antebet_rounds_extra_mv;
-DROP VIEW IF EXISTS adam_sandbox.bi_antebet_backfill_mv;
-DROP VIEW IF EXISTS adam_sandbox.bi_antebet_mv;
-DROP VIEW IF EXISTS adam_sandbox.bi_antebet_recent_mv;
-DROP VIEW IF EXISTS adam_sandbox.bi_antebet_report_v;
+DROP VIEW IF EXISTS bi_sandbox.bi_antebet_rounds_mv;
+DROP VIEW IF EXISTS bi_sandbox.bi_antebet_rounds_extra_mv;
+DROP VIEW IF EXISTS bi_sandbox.bi_antebet_backfill_mv;
+DROP VIEW IF EXISTS bi_sandbox.bi_antebet_mv;
+DROP VIEW IF EXISTS bi_sandbox.bi_antebet_recent_mv;
+DROP VIEW IF EXISTS bi_sandbox.bi_antebet_report_v;
 -- DROP USER IF EXISTS bi_antebet_definer;   -- only after the MVs are dropped
 -- then optionally the tables: bi_antebet_rounds, bi_antebet_report, bi_antebet_report_recent
 ```

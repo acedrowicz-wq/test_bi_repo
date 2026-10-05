@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Antebet report: migration from Tableau to ClickHouse (ProdCH)
--- Schema: adam_sandbox
+-- Schema: bi_sandbox
 --
 -- Layers:
 --   1. bi_antebet_rounds (AggregatingMergeTree, ONE ROW PER ROUND)
@@ -17,7 +17,7 @@
 -- Step 1. Deployment order: see README.md.
 -- =====================================================================
 
-CREATE DATABASE IF NOT EXISTS adam_sandbox;
+CREATE DATABASE IF NOT EXISTS bi_sandbox;
 
 -- ---------------------------------------------------------------------
 -- 1. Round level (state)
@@ -28,7 +28,7 @@ CREATE DATABASE IF NOT EXISTS adam_sandbox;
 --    for pruning; a round that crosses midnight has 2 rows, and the read
 --    query merges them with GROUP BY roundNumId, playerMongoId.
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS adam_sandbox.bi_antebet_rounds
+CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_rounds
 (
     action_date      Date,
     roundNumId       String,
@@ -61,7 +61,7 @@ ORDER BY (action_date, roundNumId, playerMongoId)
 --    RTP is stored per row for compatibility; in Tableau, compute it as
 --    SUM(total_win) / SUM(total_bet_amount), not as AVG(RTP).
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS adam_sandbox.bi_antebet_report
+CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_report
 (
     report_date          Date,
     wl_name              LowCardinality(String),
@@ -81,7 +81,7 @@ ENGINE = ReplacingMergeTree(refreshed_at)   -- protects against a repeated backf
 PARTITION BY toYYYYMM(report_date)
 ORDER BY (report_date, wl_name, game_name, spin_category, bonus_type, ante_bet_multiplier, wlUserId);
 
-CREATE TABLE IF NOT EXISTS adam_sandbox.bi_antebet_report_recent
-AS adam_sandbox.bi_antebet_report
+CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_report_recent
+AS bi_sandbox.bi_antebet_report
 ENGINE = MergeTree
 ORDER BY (report_date, wl_name, game_name, spin_category, bonus_type, ante_bet_multiplier, wlUserId);

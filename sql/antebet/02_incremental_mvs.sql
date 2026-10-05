@@ -10,8 +10,8 @@
 --     (no versions), so filtering on status at insert time is safe.
 --     <CUTOFF>: see README.md, step 2.
 -- ---------------------------------------------------------------------
-CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_rounds_mv
-TO adam_sandbox.bi_antebet_rounds
+CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_rounds_mv
+TO bi_sandbox.bi_antebet_rounds
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 SELECT
@@ -44,8 +44,8 @@ GROUP BY action_date, roundNumId, playerMongoId;
 --     The key (roundNumId, playerMongoId) is in both tables, so no JOIN is
 --     needed at insert time and arrival order does not matter.
 -- ---------------------------------------------------------------------
-CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_rounds_extra_mv
-TO adam_sandbox.bi_antebet_rounds
+CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_rounds_extra_mv
+TO bi_sandbox.bi_antebet_rounds
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 SELECT

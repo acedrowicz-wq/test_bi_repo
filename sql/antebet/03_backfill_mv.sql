@@ -13,22 +13,22 @@
 -- action_date is set to the processed day d (not computed from createdAt),
 -- so "min(action_date)" moves exactly one day per run.
 -- Repair if any day loaded with an error (see README, "Checks"):
---   DELETE FROM adam_sandbox.bi_antebet_rounds WHERE action_date <= '<bad day>';
+--   DELETE FROM bi_sandbox.bi_antebet_rounds WHERE action_date <= '<bad day>';
 -- and the MV will reload that day and all earlier days by itself.
 --
 -- <CUTOFF> and start_day must be identical in BOTH branches of the UNION
 -- and the same as in 02_incremental_mvs.sql.
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_backfill_mv
+CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_backfill_mv
 REFRESH EVERY 1 MINUTE
-APPEND TO adam_sandbox.bi_antebet_rounds
+APPEND TO bi_sandbox.bi_antebet_rounds
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 -- (a) slot_actions: amounts and dimensions
 WITH
     toDateTime('2026-10-05 22:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
     toDate('2026-08-20')                                                        AS start_day,
-    ifNull((SELECT min(action_date) FROM adam_sandbox.bi_antebet_rounds), toDate('1970-01-01')) AS min_day,
+    ifNull((SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds), toDate('1970-01-01')) AS min_day,
     min_day - 1                                                                 AS d,
     toDateTime(d, 'Europe/Warsaw')                                              AS ts_from,
     least(toDateTime(d + 1, 'Europe/Warsaw'), cutoff)                           AS ts_to,
@@ -61,7 +61,7 @@ UNION ALL
 WITH
     toDateTime('2026-10-05 22:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
     toDate('2026-08-20')                                                        AS start_day,
-    ifNull((SELECT min(action_date) FROM adam_sandbox.bi_antebet_rounds), toDate('1970-01-01')) AS min_day,
+    ifNull((SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds), toDate('1970-01-01')) AS min_day,
     min_day - 1                                                                 AS d,
     toDateTime(d, 'Europe/Warsaw')                                              AS ts_from,
     least(toDateTime(d + 1, 'Europe/Warsaw'), cutoff)                           AS ts_to,
