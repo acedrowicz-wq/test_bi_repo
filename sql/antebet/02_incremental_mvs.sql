@@ -1,4 +1,4 @@
--- Step 2. Incremental MVs. <CUTOFF> (both places) = a Warsaw midnight LATER than the time you create them, written in UTC (22:00 in summer time, 23:00 in winter time).
+-- Step 2. Incremental MVs. <CUTOFF> (both places) = a Warsaw midnight LATER than the time you create them, written in UTC; the same as in 03_backfill_mv.sql.
 
 -- ---------------------------------------------------------------------
 -- 1a. MV: slot_actions -> rounds

@@ -1,23 +1,29 @@
--- Step 5. Only AFTER the backfill (steps 3-4) has finished.
+-- Step 4. Report MVs and the Tableau view. They can be created right after step 3;
+-- they wait on their own until the round backfill (bi_antebet_backfill_mv) has finished.
 
 -- ---------------------------------------------------------------------
 -- 2a. Closed days -> bi_antebet_report
---     Once a day at 01:00 UTC (after Warsaw midnight). It appends every day
---     in (max(report_date) in the table, today-2], so it catches up on its
---     own after a missed run. Rounds last at most ~22 h, so day today-2 is
---     already final. The lower bound today-7 guards against an accidental
---     full scan when the table is empty: run the history backfill BEFORE
---     creating this MV.
+--     Every 15 minutes it appends the next days after max(report_date)
+--     in the table, at most 7 days per run, up to today-2 (rounds last
+--     at most ~22 h, so today-2 is already final).
+--     - Empty table: it starts from start_day (2026-08-20).
+--     - It does NOTHING until the round backfill has reached start_day
+--       (bi_antebet_rounds has rows with action_date <= start_day).
+--     So the history fills itself in (~7 runs = ~2 h after the round
+--     backfill), and then each day is appended once, by the first
+--     run after Warsaw midnight. A missed run catches up by itself.
 -- ---------------------------------------------------------------------
 CREATE MATERIALIZED VIEW IF NOT EXISTS adam_sandbox.bi_antebet_mv
-REFRESH EVERY 1 DAY OFFSET 1 HOUR
+REFRESH EVERY 15 MINUTE
 APPEND TO adam_sandbox.bi_antebet_report
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
-    toDate(now(), 'Europe/Warsaw')                                                       AS today,
-    greatest((SELECT max(report_date) FROM adam_sandbox.bi_antebet_report) + 1, today - 7) AS date_from,
-    today - 2                                                                            AS date_to
+    toDate('2026-08-20')                                                                          AS start_day,
+    toDate(now(), 'Europe/Warsaw')                                                                AS today,
+    (SELECT countIf(action_date <= start_day) > 0 FROM adam_sandbox.bi_antebet_rounds)            AS backfill_done,
+    greatest(ifNull((SELECT max(report_date) FROM adam_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, start_day) AS date_from,
+    if(backfill_done, least(date_from + 6, today - 2), date_from - 1)                             AS date_to   -- date_to < date_from = nothing to do
 SELECT
     report_date,
     dictGet('platform.whitelabels_d', 'name', tuple(wl_id))   AS wl_name,
@@ -76,7 +82,7 @@ DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDate(now(), 'Europe/Warsaw')                                                       AS today,
-    greatest((SELECT max(report_date) FROM adam_sandbox.bi_antebet_report) + 1, today - 3) AS date_from,
+    greatest(ifNull((SELECT max(report_date) FROM adam_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, today - 3) AS date_from,
     today                                                                                AS date_to
 SELECT
     report_date,

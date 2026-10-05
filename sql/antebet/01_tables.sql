@@ -9,7 +9,8 @@
 --      Real time, insensitive to arrival order (the extra row reaches
 --      ClickHouse ~40-70 s after slot_actions, freespin wins come up to
 --      several hours after the bet).
---   2. bi_antebet_report         (closed days, <= today-2)  <- bi_antebet_mv        (refresh once a day, APPEND)
+--      <- bi_antebet_backfill_mv      (one-off history, does itself 1 day/min)
+--   2. bi_antebet_report         (closed days, <= today-2)  <- bi_antebet_mv        (refresh every 15 min, APPEND)
 --      bi_antebet_report_recent  (open days)                <- bi_antebet_recent_mv (refresh every 15 min, atomic swap)
 --   3. bi_antebet_report_v (VIEW = report + recent)  ->  Tableau
 --
