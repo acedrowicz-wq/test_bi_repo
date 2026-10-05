@@ -97,7 +97,8 @@ FROM
       (
           SELECT toString(mongoId)
           FROM platform.slot_actions
-          WHERE createdAt >= ts_from
+          WHERE active                             -- once finished, this set is not built either
+            AND createdAt >= ts_from
             AND createdAt <  ts_to
             AND status IN ('COMPLETED', 'FINALIZED')
             AND actionName IN ('spin', 'buy_spin')
