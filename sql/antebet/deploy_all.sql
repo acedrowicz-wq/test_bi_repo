@@ -212,7 +212,7 @@ DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDate('2026-08-20')                                                                          AS start_day,
-    toDate(now(), 'Europe/Warsaw')                                                                AS today,
+    toDate(now(), 'UTC')                                                                AS today,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds WHERE action_date = start_day), 0) AS backfill_done,
     greatest(ifNull((SELECT max(report_date) FROM bi_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, start_day) AS date_from,
     if(backfill_done, least(date_from + 2, today - 2), date_from - 1)                             AS date_to
@@ -237,7 +237,7 @@ SELECT
 FROM
 (
     SELECT
-        toDate(toTimezone(assumeNotNull(min(first_action_at)), 'Europe/Warsaw')) AS report_date,
+        toDate(assumeNotNull(min(first_action_at)), 'UTC') AS report_date,
         max(wlId)        AS wl_id,
         max(gameId)      AS game_name,
         max(wlUserId)    AS wlUserId,
@@ -267,7 +267,7 @@ TO bi_sandbox.bi_antebet_report_recent
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
-    toDate(now(), 'Europe/Warsaw')                                                       AS today,
+    toDate(now(), 'UTC')                                                       AS today,
     greatest(ifNull((SELECT max(report_date) FROM bi_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, today - 3) AS date_from,
     today                                                                                AS date_to
 SELECT
@@ -291,7 +291,7 @@ SELECT
 FROM
 (
     SELECT
-        toDate(toTimezone(assumeNotNull(min(first_action_at)), 'Europe/Warsaw')) AS report_date,
+        toDate(assumeNotNull(min(first_action_at)), 'UTC') AS report_date,
         max(wlId)        AS wl_id,
         max(gameId)      AS game_name,
         max(wlUserId)    AS wlUserId,
