@@ -24,7 +24,8 @@ CREATE DATABASE IF NOT EXISTS bi_sandbox;
 --    Two sources write into the same row of the round; columns that one
 --    source does not know get a neutral value ('' / 0 / NULL), and
 --    max/min/sum merge them.
---    action_date = Warsaw date of the ACTION (not of the round). It is only
+--    action_date = Warsaw date of the ACTION (not of the round, and not the report day:
+--    the report counts the UTC day, see 04). It is only
 --    for pruning; a round that crosses midnight has 2 rows, and the read
 --    query merges them with GROUP BY roundNumId, playerMongoId.
 -- ---------------------------------------------------------------------

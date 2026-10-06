@@ -1,21 +1,57 @@
-# Antebet report on ClickHouse (ProdCH)
+# Antebet report on ClickHouse (ProdCH, database `bi_sandbox`)
 
-You run everything ONCE, in the SQL console, before `<CUTOFF>` (now `2026-10-05 16:00:00` UTC
-= 18:00 Warsaw time on 05.10). After that everything works by itself:
+Migration of the Tableau Antebet report (Custom SQL on `slot_actions` + `mysql_slot_actions_extra`)
+to objects in ClickHouse that refresh themselves. Tableau reads one view: `bi_sandbox.bi_antebet_report_v`.
+
+## Report day = UTC
+`report_date` = **UTC** day of the round's first action (`toDate(min(first_action_at), 'UTC')`),
+the same as the backoffice (`platform.agg_daily`). The original Tableau script used the Warsaw day,
+which differed from the backoffice by -2% to +10% per game (a 2 h window shift).
+Switched to UTC on 2026-10-06.
+
+Expected differences from the backoffice "Games Report / GGR (without Promo)":
+- bets ~0.01%: the backoffice converts at the daily currency rate, we use `convertedBet` (rate at bet time),
+- wins ~0.1%: the backoffice assigns a win to its settlement day, we assign it to the round start day
+  (freespin wins of a round started before midnight go to the previous day),
+- promo (free spins) is **included** in the report, like in the original script (a few EUR per game per day).
+
+## Architecture (everything runs by itself)
 
 | What | Object | How often |
 |---|---|---|
-| new rounds | `bi_antebet_rounds_mv`, `bi_antebet_rounds_extra_mv` | on every insert (real time) |
-| history 20.08 -> 05.10 | `bi_antebet_backfill_mv` | 1 day/min, starts by itself at 16:15 UTC, done after ~1 h |
-| closed days | `bi_antebet_mv` -> `bi_antebet_report` | every 5 min (history ~1.5 h after the backfill, then +1 day after midnight) |
-| today + yesterday | `bi_antebet_recent_mv` -> `bi_antebet_report_recent` | every 15 min |
-| Tableau | `bi_antebet_report_v` | — |
+| new rounds (amounts, dimensions) | `bi_antebet_rounds_mv`: `platform.slot_actions` -> `bi_antebet_rounds` | on every insert |
+| `ante_bet` / `bonus_type` | `bi_antebet_rounds_extra_mv`: `platform.mysql_slot_actions_extra` -> `bi_antebet_rounds` | on every insert |
+| round history before CUTOFF | `bi_antebet_backfill_mv` -> `bi_antebet_rounds` | 1 day/min; done, every run is now a no-op |
+| closed days (<= today-2 UTC) | `bi_antebet_mv` -> `bi_antebet_report` | every 5 min (3 days per run when catching up, then +1 day after UTC midnight) |
+| open days | `bi_antebet_recent_mv` -> `bi_antebet_report_recent` | every 15 min (atomic table swap) |
+| Tableau | `bi_antebet_report_v` = report + recent | — |
 
-Files, in order: `00_definer_user.sql`, `01_tables.sql`, `02_incremental_mvs.sql`,
-`03_backfill_mv.sql`, `04_report_mvs_and_view.sql`.
+All MVs run as the technical user `bi_antebet_definer` (HOST NONE, no login), not as
+the console user: the incremental MVs sit on the production insert path of `platform.slot_actions` (PeerDB).
 
-If you deploy after `<CUTOFF>`: change it
-in 02 (2 places) and 03 (2 places) to any later moment (UTC).
+Files, in deployment order: `00_definer_user.sql`, `01_tables.sql`, `02_incremental_mvs.sql`,
+`03_backfill_mv.sql`, `04_report_mvs_and_view.sql` (`deploy_all.sql` = 01-04 without comments).
+CUTOFF of the deployment: `2026-10-05 16:00:00` UTC (02 and 03, 2 places each).
+
+## Deployment history
+| When (UTC) | What |
+|---|---|
+| 2026-10-05 15:06 | objects created in `bi_sandbox` (moved from `adam_sandbox`, which was dropped) |
+| 2026-10-05 15:19 | CUTOFF moved to 16:00 UTC, backfill without waiting for midnight |
+| 2026-10-05 ~17:00 | round history 20.08-05.10 loaded; verified: 03.10 matches the original script 1:1 |
+| 2026-10-06 09:21 | report switched to the UTC day (`bi_antebet_mv`, `bi_antebet_recent_mv` recreated, report tables truncated) |
+
+## Changing report logic (without reloading rounds)
+Only the report layer is recomputed from `bi_antebet_rounds`:
+```sql
+DROP VIEW IF EXISTS bi_sandbox.bi_antebet_mv;
+DROP VIEW IF EXISTS bi_sandbox.bi_antebet_recent_mv;
+TRUNCATE TABLE bi_sandbox.bi_antebet_report;
+TRUNCATE TABLE bi_sandbox.bi_antebet_report_recent;
+-- then both CREATE MATERIALIZED VIEW statements from 04_report_mvs_and_view.sql
+```
+The history is rebuilt by itself in ~80 min (16 runs x 5 min). Changes needing new columns in
+`bi_antebet_rounds` (e.g. a promo flag) also require reloading the rounds (backfill).
 
 ## Checks
 ```sql
@@ -23,17 +59,21 @@ in 02 (2 places) and 03 (2 places) to any later moment (UTC).
 SELECT view, status, last_success_time, next_refresh_time, exception
 FROM system.view_refreshes WHERE database = 'bi_sandbox';
 
--- backfill progress: rows per day
+-- rounds per day (action_date = Warsaw day of the action)
 SELECT action_date, sum(actions_cnt) actions, count() rows
 FROM bi_sandbox.bi_antebet_rounds GROUP BY action_date ORDER BY action_date;
 
--- report
+-- report (report_date = UTC)
 SELECT report_date, sum(total_rounds), sum(total_bet_amount), sum(total_win)
 FROM bi_sandbox.bi_antebet_report_v GROUP BY report_date ORDER BY report_date DESC;
 ```
-Repairing a bad backfill day D:
-`DELETE FROM bi_sandbox.bi_antebet_rounds WHERE action_date <= 'D';` and the MV reloads it by itself
-(if bi_antebet_report already has those days: also `DELETE FROM bi_sandbox.bi_antebet_report WHERE report_date >= 'D' - 1;`).
+Repairing a bad round day D: `DELETE FROM bi_sandbox.bi_antebet_rounds WHERE action_date <= 'D';`
+(the backfill MV reloads it by itself), then rebuild the report as in "Changing report logic".
+
+## Tableau
+Connection: ClickHouse JDBC, `hyxzs78gz1.europe-west4.gcp.clickhouse.cloud:8443`, user `mysql4hyxzs78gz1`
+(`default_role`, already has SELECT on `bi_sandbox`). Data source: `bi_sandbox.bi_antebet_report_v`, Live.
+RTP as a calculated field: `SUM([total_win]) / SUM([total_bet_amount])` (not AVG of the `RTP` column).
 
 ## Rollback (MVs first: they sit on the production insert path)
 ```sql
