@@ -33,7 +33,7 @@ SELECT
     ''                                              AS buy_mode
 FROM platform.slot_actions
 WHERE status IN ('COMPLETED', 'FINALIZED')
-  AND createdAt >= '2026-10-06 12:50:00'          -- <CUTOFF> (UTC)
+  AND createdAt >= '2026-10-06 13:00:00'          -- <CUTOFF> (UTC)
 GROUP BY action_date, roundNumId, playerMongoId;
 
 -- ---------------------------------------------------------------------
@@ -79,6 +79,6 @@ FROM
     FROM platform.mysql_slot_actions_extra
     WHERE _peerdb_is_deleted = 0
       AND actionName IN ('spin', 'buy_spin')
-      AND createdAt >= '2026-10-06 12:50:00'      -- <CUTOFF> (UTC), same as in 1a
+      AND createdAt >= '2026-10-06 13:00:00'      -- <CUTOFF> (UTC), same as in 1a
 )
 WHERE ante_bet > 0 OR bonus_type != '' OR buy_mode != '';

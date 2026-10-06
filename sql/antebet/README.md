@@ -41,7 +41,7 @@ the console user: the incremental MVs sit on the production insert path of `plat
 
 Files, in deployment order: `00_definer_user.sql`, `01_tables.sql`, `02_incremental_mvs.sql`,
 `03_backfill_mv.sql`, `04_report_mvs_and_view.sql` (`deploy_all.sql` = 01-04 without comments).
-CUTOFF of the deployment: `2026-10-06 12:50:00` UTC (02 and 03, 2 places each).
+CUTOFF of the deployment: `2026-10-06 13:00:00` UTC (02 and 03, 2 places each).
 
 ## Deployment history
 | When (UTC) | What |
@@ -50,7 +50,7 @@ CUTOFF of the deployment: `2026-10-06 12:50:00` UTC (02 and 03, 2 places each).
 | 2026-10-05 15:19 | CUTOFF moved to 16:00 UTC, backfill without waiting for midnight |
 | 2026-10-05 ~17:00 | round history 20.08-05.10 loaded; verified: 03.10 matches the original script 1:1 |
 | 2026-10-06 09:21 | report switched to the UTC day (`bi_antebet_mv`, `bi_antebet_recent_mv` recreated, report tables truncated) |
-| 2026-10-06 ~13:00 | `bonus_feature` column added (bonus type: Buy mode N / Triggered bonus / Ante >= 50 / No bonus); full rebuild, CUTOFF 12:50 UTC |
+| 2026-10-06 ~13:00 | `bonus_feature` column added (bonus type: Buy mode N / Triggered bonus / Ante >= 50 / No bonus); full rebuild, CUTOFF 13:00 UTC |
 
 ## Changing report logic (without reloading rounds)
 Only the report layer is recomputed from `bi_antebet_rounds`:
