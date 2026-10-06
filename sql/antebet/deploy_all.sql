@@ -77,7 +77,7 @@ SELECT
     ''                                              AS buy_mode
 FROM platform.slot_actions
 WHERE status IN ('COMPLETED', 'FINALIZED')
-  AND createdAt >= '2026-10-06 13:30:00'
+  AND createdAt >= '2026-10-06 12:35:00'
 GROUP BY action_date, roundNumId, playerMongoId;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_rounds_extra_mv
@@ -113,7 +113,7 @@ FROM
     FROM platform.mysql_slot_actions_extra
     WHERE _peerdb_is_deleted = 0
       AND actionName IN ('spin', 'buy_spin')
-      AND createdAt >= '2026-10-06 13:30:00'
+      AND createdAt >= '2026-10-06 12:35:00'
 )
 WHERE ante_bet > 0 OR bonus_type != '' OR buy_mode != '';
 
@@ -123,7 +123,7 @@ APPEND TO bi_sandbox.bi_antebet_rounds
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
-    toDateTime('2026-10-06 13:30:00', 'UTC')                                    AS cutoff,
+    toDateTime('2026-10-06 12:35:00', 'UTC')                                    AS cutoff,
     toDate('2026-08-20')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
@@ -162,7 +162,7 @@ GROUP BY roundNumId, playerMongoId
 UNION ALL
 
 WITH
-    toDateTime('2026-10-06 13:30:00', 'UTC')                                    AS cutoff,
+    toDateTime('2026-10-06 12:35:00', 'UTC')                                    AS cutoff,
     toDate('2026-08-20')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds

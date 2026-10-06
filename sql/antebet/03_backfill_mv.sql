@@ -24,7 +24,7 @@ DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 -- (a) slot_actions: amounts and dimensions
 WITH
-    toDateTime('2026-10-06 13:30:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
+    toDateTime('2026-10-06 12:35:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
     toDate('2026-08-20')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
@@ -64,7 +64,7 @@ UNION ALL
 
 -- (b) mysql_slot_actions_extra: ante_bet / bonus_type of the bet actions from the same day
 WITH
-    toDateTime('2026-10-06 13:30:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
+    toDateTime('2026-10-06 12:35:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
     toDate('2026-08-20')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
