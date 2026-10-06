@@ -36,6 +36,12 @@ SELECT
     )                                                          AS spin_category,
     ante_bet_multiplier,
     if(raw_bonus_type != '', raw_bonus_type, 'regular game')   AS bonus_type,
+    multiIf(
+        has_buy_spin = 1,           concat('Buy mode ', if(raw_buy_mode != '', raw_buy_mode, '?')),
+        ante_bet_multiplier >= 50,  'Ante >= 50',
+        has_feature = 1,            'Triggered bonus',
+                                    'No bonus'
+    )                                                          AS bonus_feature,
     count()                                                    AS total_rounds,
     sum(round_bet)                                             AS total_bet_amount,
     sum(round_win)                                             AS total_win,
@@ -54,7 +60,9 @@ FROM
         sum(round_win)   AS round_win,
         max(has_buy_spin) AS has_buy_spin,
         max(ante_bet)    AS ante_bet_multiplier,
-        max(bonus_type)  AS raw_bonus_type
+        max(bonus_type)  AS raw_bonus_type,
+        max(buy_mode)    AS raw_buy_mode,
+        max(has_feature) AS has_feature
     FROM bi_sandbox.bi_antebet_rounds
     WHERE date_to >= date_from                                -- nothing to do = nothing is read
       AND action_date BETWEEN date_from - 1 AND date_to + 1   -- +-1 day: rounds that cross midnight
@@ -66,7 +74,7 @@ WHERE dictHas('platform.currency_d', tuple(cur))
   AND dictGetUInt8('platform.currency_d', 'isFun', tuple(cur)) = 0
   AND dictHas('platform.whitelabels_d', tuple(wl_id))
   AND dictGetUInt8('platform.whitelabels_d', 'isTest', tuple(wl_id)) = 0
-GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type
+GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type, bonus_feature
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
 -- ---------------------------------------------------------------------
@@ -97,6 +105,12 @@ SELECT
     )                                                          AS spin_category,
     ante_bet_multiplier,
     if(raw_bonus_type != '', raw_bonus_type, 'regular game')   AS bonus_type,
+    multiIf(
+        has_buy_spin = 1,           concat('Buy mode ', if(raw_buy_mode != '', raw_buy_mode, '?')),
+        ante_bet_multiplier >= 50,  'Ante >= 50',
+        has_feature = 1,            'Triggered bonus',
+                                    'No bonus'
+    )                                                          AS bonus_feature,
     count()                                                    AS total_rounds,
     sum(round_bet)                                             AS total_bet_amount,
     sum(round_win)                                             AS total_win,
@@ -115,7 +129,9 @@ FROM
         sum(round_win)   AS round_win,
         max(has_buy_spin) AS has_buy_spin,
         max(ante_bet)    AS ante_bet_multiplier,
-        max(bonus_type)  AS raw_bonus_type
+        max(bonus_type)  AS raw_bonus_type,
+        max(buy_mode)    AS raw_buy_mode,
+        max(has_feature) AS has_feature
     FROM bi_sandbox.bi_antebet_rounds
     WHERE action_date >= date_from - 1
     GROUP BY roundNumId, playerMongoId
@@ -126,7 +142,7 @@ WHERE dictHas('platform.currency_d', tuple(cur))
   AND dictGetUInt8('platform.currency_d', 'isFun', tuple(cur)) = 0
   AND dictHas('platform.whitelabels_d', tuple(wl_id))
   AND dictGetUInt8('platform.whitelabels_d', 'isTest', tuple(wl_id)) = 0
-GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type
+GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type, bonus_feature
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
 -- ---------------------------------------------------------------------

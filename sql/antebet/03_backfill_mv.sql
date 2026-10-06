@@ -24,7 +24,7 @@ DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 -- (a) slot_actions: amounts and dimensions
 WITH
-    toDateTime('2026-10-05 16:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
+    toDateTime('2026-10-06 13:30:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
     toDate('2026-08-20')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
@@ -49,8 +49,10 @@ SELECT
     sum(convertedBet)                AS round_bet,
     sum(convertedWin)                AS round_win,
     max(actionName = 'buy_spin')     AS has_buy_spin,
+    max(actionName NOT IN ('spin', 'buy_spin')) AS has_feature,
     toFloat64(0)                     AS ante_bet,
-    ''                               AS bonus_type
+    ''                               AS bonus_type,
+    ''                               AS buy_mode
 FROM platform.slot_actions
 WHERE active
   AND status IN ('COMPLETED', 'FINALIZED')
@@ -62,7 +64,7 @@ UNION ALL
 
 -- (b) mysql_slot_actions_extra: ante_bet / bonus_type of the bet actions from the same day
 WITH
-    toDateTime('2026-10-05 16:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
+    toDateTime('2026-10-06 13:30:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
     toDate('2026-08-20')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
@@ -87,15 +89,18 @@ SELECT
     toDecimal128(0, 4)                           AS round_bet,
     toDecimal128(0, 4)                           AS round_win,
     toUInt8(0)                                   AS has_buy_spin,
+    toUInt8(0)                                   AS has_feature,
     ante_bet,
-    bonus_type
+    bonus_type,
+    buy_mode
 FROM
 (
     SELECT
         roundNumId,
         playerMongoId,
         JSONExtractFloat(finalContext, 'spins', 'ante_bet')    AS ante_bet,
-        JSONExtractString(finalContext, 'spins', 'bonus_type') AS bonus_type
+        JSONExtractString(finalContext, 'spins', 'bonus_type') AS bonus_type,
+        if(actionName = 'buy_spin', JSONExtractString(finalContext, 'last_args', 'selected_mode'), '') AS buy_mode
     FROM platform.mysql_slot_actions_extra
     WHERE active
       AND _peerdb_is_deleted = 0
@@ -112,5 +117,5 @@ FROM
             AND actionName IN ('spin', 'buy_spin')
       )
 )
-WHERE ante_bet > 0 OR bonus_type != ''
+WHERE ante_bet > 0 OR bonus_type != '' OR buy_mode != ''
 SETTINGS max_bytes_before_external_group_by = 8000000000;

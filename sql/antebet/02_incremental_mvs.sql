@@ -27,11 +27,13 @@ SELECT
     sum(convertedBet)                               AS round_bet,
     sum(convertedWin)                               AS round_win,
     max(actionName = 'buy_spin')                    AS has_buy_spin,
+    max(actionName NOT IN ('spin', 'buy_spin'))     AS has_feature,
     toFloat64(0)                                    AS ante_bet,
-    ''                                              AS bonus_type
+    ''                                              AS bonus_type,
+    ''                                              AS buy_mode
 FROM platform.slot_actions
 WHERE status IN ('COMPLETED', 'FINALIZED')
-  AND createdAt >= '2026-10-05 16:00:00'          -- <CUTOFF> (UTC)
+  AND createdAt >= '2026-10-06 13:30:00'          -- <CUTOFF> (UTC)
 GROUP BY action_date, roundNumId, playerMongoId;
 
 -- ---------------------------------------------------------------------
@@ -61,8 +63,10 @@ SELECT
     toDecimal128(0, 4)                           AS round_bet,
     toDecimal128(0, 4)                           AS round_win,
     toUInt8(0)                                   AS has_buy_spin,
+    toUInt8(0)                                   AS has_feature,
     ante_bet,
-    bonus_type
+    bonus_type,
+    buy_mode
 FROM
 (
     SELECT
@@ -70,10 +74,11 @@ FROM
         roundNumId,
         playerMongoId,
         JSONExtractFloat(finalContext, 'spins', 'ante_bet')    AS ante_bet,
-        JSONExtractString(finalContext, 'spins', 'bonus_type') AS bonus_type
+        JSONExtractString(finalContext, 'spins', 'bonus_type') AS bonus_type,
+        if(actionName = 'buy_spin', JSONExtractString(finalContext, 'last_args', 'selected_mode'), '') AS buy_mode
     FROM platform.mysql_slot_actions_extra
     WHERE _peerdb_is_deleted = 0
       AND actionName IN ('spin', 'buy_spin')
-      AND createdAt >= '2026-10-05 16:00:00'      -- <CUTOFF> (UTC), same as in 1a
+      AND createdAt >= '2026-10-06 13:30:00'      -- <CUTOFF> (UTC), same as in 1a
 )
-WHERE ante_bet > 0 OR bonus_type != '';
+WHERE ante_bet > 0 OR bonus_type != '' OR buy_mode != '';

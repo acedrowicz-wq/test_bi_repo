@@ -44,10 +44,12 @@ CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_rounds
     round_bet        SimpleAggregateFunction(sum, Decimal(38, 4)),
     round_win        SimpleAggregateFunction(sum, Decimal(38, 4)),
     has_buy_spin     SimpleAggregateFunction(max, UInt8),
+    has_feature      SimpleAggregateFunction(max, UInt8),     -- round has bonus actions (respin / freespin / bonus_spins_stop ...)
 
     -- from mysql_slot_actions_extra (finalContext of the bet action)
     ante_bet         SimpleAggregateFunction(max, Float64),
-    bonus_type       SimpleAggregateFunction(max, LowCardinality(String))
+    bonus_type       SimpleAggregateFunction(max, LowCardinality(String)),
+    buy_mode         SimpleAggregateFunction(max, LowCardinality(String))   -- last_args.selected_mode of buy_spin
 )
 ENGINE = AggregatingMergeTree
 PARTITION BY toYYYYMM(action_date)
@@ -71,6 +73,7 @@ CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_report
     spin_category        LowCardinality(String),
     ante_bet_multiplier  Float64,
     bonus_type           LowCardinality(String),
+    bonus_feature        LowCardinality(String),   -- Buy mode N / Ante >= 50 / Triggered bonus / No bonus
     total_rounds         UInt64,
     total_bet_amount     Decimal(38, 4),
     total_win            Decimal(38, 4),
@@ -80,9 +83,9 @@ CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_report
 )
 ENGINE = ReplacingMergeTree(refreshed_at)   -- protects against a repeated backfill of the same day
 PARTITION BY toYYYYMM(report_date)
-ORDER BY (report_date, wl_name, game_name, spin_category, bonus_type, ante_bet_multiplier, wlUserId);
+ORDER BY (report_date, wl_name, game_name, spin_category, bonus_feature, bonus_type, ante_bet_multiplier, wlUserId);
 
 CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_report_recent
 AS bi_sandbox.bi_antebet_report
 ENGINE = MergeTree
-ORDER BY (report_date, wl_name, game_name, spin_category, bonus_type, ante_bet_multiplier, wlUserId);
+ORDER BY (report_date, wl_name, game_name, spin_category, bonus_feature, bonus_type, ante_bet_multiplier, wlUserId);

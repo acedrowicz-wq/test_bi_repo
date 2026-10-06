@@ -17,9 +17,11 @@ CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_rounds
     round_bet        SimpleAggregateFunction(sum, Decimal(38, 4)),
     round_win        SimpleAggregateFunction(sum, Decimal(38, 4)),
     has_buy_spin     SimpleAggregateFunction(max, UInt8),
+    has_feature      SimpleAggregateFunction(max, UInt8),
 
     ante_bet         SimpleAggregateFunction(max, Float64),
-    bonus_type       SimpleAggregateFunction(max, LowCardinality(String))
+    bonus_type       SimpleAggregateFunction(max, LowCardinality(String)),
+    buy_mode         SimpleAggregateFunction(max, LowCardinality(String))
 )
 ENGINE = AggregatingMergeTree
 PARTITION BY toYYYYMM(action_date)
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_report
     spin_category        LowCardinality(String),
     ante_bet_multiplier  Float64,
     bonus_type           LowCardinality(String),
+    bonus_feature        LowCardinality(String),
     total_rounds         UInt64,
     total_bet_amount     Decimal(38, 4),
     total_win            Decimal(38, 4),
@@ -44,12 +47,12 @@ CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_report
 )
 ENGINE = ReplacingMergeTree(refreshed_at)
 PARTITION BY toYYYYMM(report_date)
-ORDER BY (report_date, wl_name, game_name, spin_category, bonus_type, ante_bet_multiplier, wlUserId);
+ORDER BY (report_date, wl_name, game_name, spin_category, bonus_feature, bonus_type, ante_bet_multiplier, wlUserId);
 
 CREATE TABLE IF NOT EXISTS bi_sandbox.bi_antebet_report_recent
 AS bi_sandbox.bi_antebet_report
 ENGINE = MergeTree
-ORDER BY (report_date, wl_name, game_name, spin_category, bonus_type, ante_bet_multiplier, wlUserId);
+ORDER BY (report_date, wl_name, game_name, spin_category, bonus_feature, bonus_type, ante_bet_multiplier, wlUserId);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_rounds_mv
 TO bi_sandbox.bi_antebet_rounds
@@ -68,11 +71,13 @@ SELECT
     sum(convertedBet)                               AS round_bet,
     sum(convertedWin)                               AS round_win,
     max(actionName = 'buy_spin')                    AS has_buy_spin,
+    max(actionName NOT IN ('spin', 'buy_spin'))     AS has_feature,
     toFloat64(0)                                    AS ante_bet,
-    ''                                              AS bonus_type
+    ''                                              AS bonus_type,
+    ''                                              AS buy_mode
 FROM platform.slot_actions
 WHERE status IN ('COMPLETED', 'FINALIZED')
-  AND createdAt >= '2026-10-05 16:00:00'
+  AND createdAt >= '2026-10-06 13:30:00'
 GROUP BY action_date, roundNumId, playerMongoId;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_rounds_extra_mv
@@ -92,8 +97,10 @@ SELECT
     toDecimal128(0, 4)                           AS round_bet,
     toDecimal128(0, 4)                           AS round_win,
     toUInt8(0)                                   AS has_buy_spin,
+    toUInt8(0)                                   AS has_feature,
     ante_bet,
-    bonus_type
+    bonus_type,
+    buy_mode
 FROM
 (
     SELECT
@@ -101,13 +108,14 @@ FROM
         roundNumId,
         playerMongoId,
         JSONExtractFloat(finalContext, 'spins', 'ante_bet')    AS ante_bet,
-        JSONExtractString(finalContext, 'spins', 'bonus_type') AS bonus_type
+        JSONExtractString(finalContext, 'spins', 'bonus_type') AS bonus_type,
+        if(actionName = 'buy_spin', JSONExtractString(finalContext, 'last_args', 'selected_mode'), '') AS buy_mode
     FROM platform.mysql_slot_actions_extra
     WHERE _peerdb_is_deleted = 0
       AND actionName IN ('spin', 'buy_spin')
-      AND createdAt >= '2026-10-05 16:00:00'
+      AND createdAt >= '2026-10-06 13:30:00'
 )
-WHERE ante_bet > 0 OR bonus_type != '';
+WHERE ante_bet > 0 OR bonus_type != '' OR buy_mode != '';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_backfill_mv
 REFRESH EVERY 1 MINUTE
@@ -115,7 +123,7 @@ APPEND TO bi_sandbox.bi_antebet_rounds
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
-    toDateTime('2026-10-05 16:00:00', 'UTC')                                    AS cutoff,
+    toDateTime('2026-10-06 13:30:00', 'UTC')                                    AS cutoff,
     toDate('2026-08-20')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
@@ -140,8 +148,10 @@ SELECT
     sum(convertedBet)                AS round_bet,
     sum(convertedWin)                AS round_win,
     max(actionName = 'buy_spin')     AS has_buy_spin,
+    max(actionName NOT IN ('spin', 'buy_spin')) AS has_feature,
     toFloat64(0)                     AS ante_bet,
-    ''                               AS bonus_type
+    ''                               AS bonus_type,
+    ''                               AS buy_mode
 FROM platform.slot_actions
 WHERE active
   AND status IN ('COMPLETED', 'FINALIZED')
@@ -152,7 +162,7 @@ GROUP BY roundNumId, playerMongoId
 UNION ALL
 
 WITH
-    toDateTime('2026-10-05 16:00:00', 'UTC')                                    AS cutoff,
+    toDateTime('2026-10-06 13:30:00', 'UTC')                                    AS cutoff,
     toDate('2026-08-20')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
@@ -177,15 +187,18 @@ SELECT
     toDecimal128(0, 4)                           AS round_bet,
     toDecimal128(0, 4)                           AS round_win,
     toUInt8(0)                                   AS has_buy_spin,
+    toUInt8(0)                                   AS has_feature,
     ante_bet,
-    bonus_type
+    bonus_type,
+    buy_mode
 FROM
 (
     SELECT
         roundNumId,
         playerMongoId,
         JSONExtractFloat(finalContext, 'spins', 'ante_bet')    AS ante_bet,
-        JSONExtractString(finalContext, 'spins', 'bonus_type') AS bonus_type
+        JSONExtractString(finalContext, 'spins', 'bonus_type') AS bonus_type,
+        if(actionName = 'buy_spin', JSONExtractString(finalContext, 'last_args', 'selected_mode'), '') AS buy_mode
     FROM platform.mysql_slot_actions_extra
     WHERE active
       AND _peerdb_is_deleted = 0
@@ -202,7 +215,7 @@ FROM
             AND actionName IN ('spin', 'buy_spin')
       )
 )
-WHERE ante_bet > 0 OR bonus_type != ''
+WHERE ante_bet > 0 OR bonus_type != '' OR buy_mode != ''
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_mv
@@ -228,6 +241,12 @@ SELECT
     )                                                          AS spin_category,
     ante_bet_multiplier,
     if(raw_bonus_type != '', raw_bonus_type, 'regular game')   AS bonus_type,
+    multiIf(
+        has_buy_spin = 1,           concat('Buy mode ', if(raw_buy_mode != '', raw_buy_mode, '?')),
+        ante_bet_multiplier >= 50,  'Ante >= 50',
+        has_feature = 1,            'Triggered bonus',
+                                    'No bonus'
+    )                                                          AS bonus_feature,
     count()                                                    AS total_rounds,
     sum(round_bet)                                             AS total_bet_amount,
     sum(round_win)                                             AS total_win,
@@ -246,7 +265,9 @@ FROM
         sum(round_win)   AS round_win,
         max(has_buy_spin) AS has_buy_spin,
         max(ante_bet)    AS ante_bet_multiplier,
-        max(bonus_type)  AS raw_bonus_type
+        max(bonus_type)  AS raw_bonus_type,
+        max(buy_mode)    AS raw_buy_mode,
+        max(has_feature) AS has_feature
     FROM bi_sandbox.bi_antebet_rounds
     WHERE date_to >= date_from
       AND action_date BETWEEN date_from - 1 AND date_to + 1
@@ -258,7 +279,7 @@ WHERE dictHas('platform.currency_d', tuple(cur))
   AND dictGetUInt8('platform.currency_d', 'isFun', tuple(cur)) = 0
   AND dictHas('platform.whitelabels_d', tuple(wl_id))
   AND dictGetUInt8('platform.whitelabels_d', 'isTest', tuple(wl_id)) = 0
-GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type
+GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type, bonus_feature
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_recent_mv
@@ -282,6 +303,12 @@ SELECT
     )                                                          AS spin_category,
     ante_bet_multiplier,
     if(raw_bonus_type != '', raw_bonus_type, 'regular game')   AS bonus_type,
+    multiIf(
+        has_buy_spin = 1,           concat('Buy mode ', if(raw_buy_mode != '', raw_buy_mode, '?')),
+        ante_bet_multiplier >= 50,  'Ante >= 50',
+        has_feature = 1,            'Triggered bonus',
+                                    'No bonus'
+    )                                                          AS bonus_feature,
     count()                                                    AS total_rounds,
     sum(round_bet)                                             AS total_bet_amount,
     sum(round_win)                                             AS total_win,
@@ -300,7 +327,9 @@ FROM
         sum(round_win)   AS round_win,
         max(has_buy_spin) AS has_buy_spin,
         max(ante_bet)    AS ante_bet_multiplier,
-        max(bonus_type)  AS raw_bonus_type
+        max(bonus_type)  AS raw_bonus_type,
+        max(buy_mode)    AS raw_buy_mode,
+        max(has_feature) AS has_feature
     FROM bi_sandbox.bi_antebet_rounds
     WHERE action_date >= date_from - 1
     GROUP BY roundNumId, playerMongoId
@@ -311,7 +340,7 @@ WHERE dictHas('platform.currency_d', tuple(cur))
   AND dictGetUInt8('platform.currency_d', 'isFun', tuple(cur)) = 0
   AND dictHas('platform.whitelabels_d', tuple(wl_id))
   AND dictGetUInt8('platform.whitelabels_d', 'isTest', tuple(wl_id)) = 0
-GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type
+GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type, bonus_feature
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
 CREATE OR REPLACE VIEW bi_sandbox.bi_antebet_report_v AS
