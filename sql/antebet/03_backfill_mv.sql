@@ -6,8 +6,9 @@
 --   then:    min(action_date) of days before the <CUTOFF> day - 1, down to start_day.
 -- "The <CUTOFF> day is done" = there are rows for that day with first_action_at < <CUTOFF>
 -- (rows from the incremental MVs have first_action_at >= <CUTOFF> or NULL).
--- It starts on its own 15 min after <CUTOFF> (PeerDB lag). One day takes ~45-60 s,
--- so it runs every minute; 47 days take ~1 h. After that every run does nothing.
+-- It starts on its own 15 min after <CUTOFF> (PeerDB lag). It runs every 30 s (a big day takes
+-- ~45-60 s, the next run starts right after). From 2026-10-08 the history reaches back to
+-- 2024-10-17 (the start of slot_actions). After that every run does nothing.
 --
 -- action_date is set to the processed day d (not computed from createdAt).
 -- Repair if any day D (< the <CUTOFF> day) loaded with an error:
@@ -18,14 +19,14 @@
 -- and the same as in 02_incremental_mvs.sql.
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_backfill_mv
-REFRESH EVERY 1 MINUTE
+REFRESH EVERY 30 SECOND
 APPEND TO bi_sandbox.bi_antebet_rounds
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 -- (a) slot_actions: amounts and dimensions
 WITH
     toDateTime('2026-10-06 13:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
-    toDate('2026-08-20')                                                        AS start_day,
+    toDate('2024-10-17')                                                        AS start_day,   -- first day of platform.slot_actions
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
             WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,
@@ -65,7 +66,7 @@ UNION ALL
 -- (b) mysql_slot_actions_extra: ante_bet / bonus_type of the bet actions from the same day
 WITH
     toDateTime('2026-10-06 13:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
-    toDate('2026-08-20')                                                        AS start_day,
+    toDate('2024-10-17')                                                        AS start_day,   -- first day of platform.slot_actions
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
             WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,

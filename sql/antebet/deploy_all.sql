@@ -118,13 +118,13 @@ FROM
 WHERE ante_bet > 0 OR bonus_type != '' OR buy_mode != '';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_backfill_mv
-REFRESH EVERY 1 MINUTE
+REFRESH EVERY 30 SECOND
 APPEND TO bi_sandbox.bi_antebet_rounds
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
     toDateTime('2026-10-06 13:00:00', 'UTC')                                    AS cutoff,
-    toDate('2026-08-20')                                                        AS start_day,
+    toDate('2024-10-17')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
             WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,
@@ -163,7 +163,7 @@ UNION ALL
 
 WITH
     toDateTime('2026-10-06 13:00:00', 'UTC')                                    AS cutoff,
-    toDate('2026-08-20')                                                        AS start_day,
+    toDate('2024-10-17')                                                        AS start_day,
     toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
             WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,
@@ -224,7 +224,7 @@ APPEND TO bi_sandbox.bi_antebet_report
 DEFINER = bi_antebet_definer SQL SECURITY DEFINER
 AS
 WITH
-    toDate('2026-08-20')                                                                          AS start_day,
+    toDate('2024-10-17')                                                                          AS start_day,
     toDate(now(), 'UTC')                                                                AS today,
     ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds WHERE action_date = start_day), 0) AS backfill_done,
     greatest(ifNull((SELECT max(report_date) FROM bi_sandbox.bi_antebet_report), toDate('1970-01-01')) + 1, start_day) AS date_from,
@@ -335,6 +335,70 @@ FROM
     GROUP BY roundNumId, playerMongoId
     HAVING sum(actions_cnt) > 0
        AND report_date >= date_from
+)
+WHERE dictHas('platform.currency_d', tuple(cur))
+  AND dictGetUInt8('platform.currency_d', 'isFun', tuple(cur)) = 0
+  AND dictHas('platform.whitelabels_d', tuple(wl_id))
+  AND dictGetUInt8('platform.whitelabels_d', 'isTest', tuple(wl_id)) = 0
+GROUP BY report_date, wl_name, game_name, wlUserId, spin_category, ante_bet_multiplier, bonus_type, bonus_feature
+SETTINGS max_bytes_before_external_group_by = 8000000000;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_antebet_history_mv
+REFRESH EVERY 1 MINUTE
+APPEND TO bi_sandbox.bi_antebet_report
+DEFINER = bi_antebet_definer SQL SECURITY DEFINER
+AS
+WITH
+    toDate('2024-10-17')                                                                          AS start_day,
+    ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds WHERE action_date = start_day), 0) AS backfill_done,
+    ifNull((SELECT min(report_date) FROM bi_sandbox.bi_antebet_report), toDate('1970-01-01'))   AS rep_min,
+    if(backfill_done AND rep_min > start_day, rep_min - 1, start_day - 1)                         AS date_to,
+    greatest(date_to - 2, start_day)                                                              AS date_from
+SELECT
+    report_date,
+    dictGet('platform.whitelabels_d', 'name', tuple(wl_id))   AS wl_name,
+    game_name,
+    wlUserId,
+    multiIf(
+        has_buy_spin = 1 OR ante_bet_multiplier >= 50, '3. Buy Bonus',
+        ante_bet_multiplier > 0,                       '2. Ante Bet',
+                                                       '1. Regular Spin'
+    )                                                          AS spin_category,
+    ante_bet_multiplier,
+    if(raw_bonus_type != '', raw_bonus_type, 'regular game')   AS bonus_type,
+    multiIf(
+        has_buy_spin = 1,           concat('Buy mode ', if(raw_buy_mode != '', raw_buy_mode, '?')),
+        ante_bet_multiplier >= 50,  'Ante >= 50',
+        has_feature = 1,            'Triggered bonus',
+                                    'No bonus'
+    )                                                          AS bonus_feature,
+    count()                                                    AS total_rounds,
+    sum(round_bet)                                             AS total_bet_amount,
+    sum(round_win)                                             AS total_win,
+    total_bet_amount - total_win                               AS GGR,
+    if(total_bet_amount > 0, toFloat64(total_win) / toFloat64(total_bet_amount), 0) AS RTP,
+    now()                                                      AS refreshed_at
+FROM
+(
+    SELECT
+        toDate(assumeNotNull(min(first_action_at)), 'UTC') AS report_date,
+        max(wlId)        AS wl_id,
+        max(gameId)      AS game_name,
+        max(wlUserId)    AS wlUserId,
+        max(currency)    AS cur,
+        sum(round_bet)   AS round_bet,
+        sum(round_win)   AS round_win,
+        max(has_buy_spin) AS has_buy_spin,
+        max(ante_bet)    AS ante_bet_multiplier,
+        max(bonus_type)  AS raw_bonus_type,
+        max(buy_mode)    AS raw_buy_mode,
+        max(has_feature) AS has_feature
+    FROM bi_sandbox.bi_antebet_rounds
+    WHERE date_to >= date_from
+      AND action_date BETWEEN date_from - 1 AND date_to + 1
+    GROUP BY roundNumId, playerMongoId
+    HAVING sum(actions_cnt) > 0
+       AND report_date BETWEEN date_from AND date_to
 )
 WHERE dictHas('platform.currency_d', tuple(cur))
   AND dictGetUInt8('platform.currency_d', 'isFun', tuple(cur)) = 0
