@@ -31,7 +31,7 @@ Mode numbers are the game's raw values; a mapping to names (e.g. "Super Bonus") 
 |---|---|---|
 | new rounds (amounts, dimensions) | `bi_antebet_rounds_mv`: `platform.slot_actions` -> `bi_antebet_rounds` | on every insert |
 | `ante_bet` / `bonus_type` | `bi_antebet_rounds_extra_mv`: `platform.mysql_slot_actions_extra` -> `bi_antebet_rounds` | on every insert |
-| round history before CUTOFF, from 2024-10-17 | `bi_antebet_backfill_mv` -> `bi_antebet_rounds` | 1 day per run, every 30 s; after it finishes, every run is a no-op |
+| round history before CUTOFF, from 2024-10-17 | `bi_antebet_backfill_mv` -> `bi_antebet_rounds` | 1 day per run, every 30 s; **once it finishes, drop it** (`DROP VIEW bi_sandbox.bi_antebet_backfill_mv`) - even when it has nothing to do, it reads min(action_date) from the whole round table every 30 s |
 | report history before the oldest day in the report | `bi_antebet_history_mv` -> `bi_antebet_report` | every 1 min, 3 days per run backwards; starts only after the round backfill finishes |
 | closed days (<= today-2 UTC) | `bi_antebet_mv` -> `bi_antebet_report` | every 5 min (3 days per run when catching up, then +1 day after UTC midnight) |
 | open days | `bi_antebet_recent_mv` -> `bi_antebet_report_recent` | every 15 min (atomic table swap) |
@@ -57,6 +57,7 @@ CUTOFF of the deployment: `2026-10-06 13:00:00` UTC (02 and 03, 2 places each).
 | 2026-10-05 15:19 | CUTOFF moved to 16:00 UTC, backfill without waiting for midnight |
 | 2026-10-05 ~17:00 | round history 20.08-05.10 loaded; verified: 03.10 matches the original script 1:1 |
 | 2026-10-06 09:21 | report switched to the UTC day (`bi_antebet_mv`, `bi_antebet_recent_mv` recreated, report tables truncated) |
+| 2026-10-09 | backfill stalled on 2024-10-27 (no actions that day); 2024-10-17..26 added with a one-off INSERT; the repo version of the backfill writes a day marker |
 | 2026-10-08 | history extended to 2024-10-17 (`bi_antebet_backfill_mv` with a new start_day, new `bi_antebet_history_mv`) |
 | 2026-10-06 ~13:00 | `bonus_feature` column added (bonus type: Buy mode N / Triggered bonus / Ante >= 50 / No bonus); full rebuild, CUTOFF 13:00 UTC |
 

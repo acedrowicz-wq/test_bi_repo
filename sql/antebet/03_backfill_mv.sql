@@ -119,4 +119,42 @@ FROM
       )
 )
 WHERE ante_bet > 0 OR bonus_type != '' OR buy_mode != ''
+
+UNION ALL
+
+-- (c) day marker: 1 row per processed day (actions_cnt = 0, ignored by the report),
+--     so that a day with no actions (e.g. 2024-10-27) still moves min(action_date)
+--     and does not stall the backfill.
+WITH
+    toDateTime('2026-10-06 13:00:00', 'UTC')                                    AS cutoff,     -- <CUTOFF>
+    toDate('2024-10-17')                                                        AS start_day,   -- first day of platform.slot_actions
+    toDate(cutoff, 'Europe/Warsaw')                                             AS cutoff_day,
+    ifNull((SELECT count() > 0 FROM bi_sandbox.bi_antebet_rounds
+            WHERE action_date = cutoff_day AND first_action_at < cutoff), 0)    AS cutoff_day_done,
+    (SELECT min(action_date) FROM bi_sandbox.bi_antebet_rounds
+     WHERE action_date < cutoff_day)                                            AS hist_min_raw,
+    if(hist_min_raw IS NULL OR hist_min_raw = toDate('1970-01-01'), cutoff_day, assumeNotNull(hist_min_raw)) AS hist_min,
+    if(cutoff_day_done, hist_min - 1, cutoff_day)                               AS d,
+    toDateTime(d, 'Europe/Warsaw')                                              AS ts_from,
+    least(toDateTime(d + 1, 'Europe/Warsaw'), cutoff)                           AS ts_to,
+    now() >= cutoff + INTERVAL 15 MINUTE AND d >= start_day                     AS active
+SELECT
+    d                                            AS action_date,
+    '__day_marker__'                             AS roundNumId,
+    ''                                           AS playerMongoId,
+    ''                                           AS wlId,
+    ''                                           AS gameId,
+    ''                                           AS wlUserId,
+    ''                                           AS currency,
+    CAST(NULL AS Nullable(DateTime64(6, 'UTC'))) AS first_action_at,
+    toUInt64(0)                                  AS actions_cnt,
+    toDecimal128(0, 4)                           AS round_bet,
+    toDecimal128(0, 4)                           AS round_win,
+    toUInt8(0)                                   AS has_buy_spin,
+    toUInt8(0)                                   AS has_feature,
+    toFloat64(0)                                 AS ante_bet,
+    ''                                           AS bonus_type,
+    ''                                           AS buy_mode
+FROM system.one
+WHERE active
 SETTINGS max_bytes_before_external_group_by = 8000000000;
