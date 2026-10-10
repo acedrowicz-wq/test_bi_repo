@@ -47,7 +47,7 @@ Without `actionName` the slot rows would drop to ~0.28 M / day, and without the 
 | 3 | `updatedAt_str` / `statusUpdatedAt_str` = `2026-10-09 02:October:01`: Warsaw time, `%Y-%m-%d %H:%M:%S`, and in ClickHouse `%M` is the **month name**. | Kept 1:1. Correct format: `'%Y-%m-%d %H:%i:%S'`. |
 | 4 | `incremental_id` = `toUnixTimestamp(createdAt)`. | Now the unix time of the hour. |
 | 5 | `partner_name` = the partner whose `wls` list contains the casino; `acornfunna`, `yaycasinocomna` are in no list → empty. | Same rule. |
-| 6 | Live status: the CSV has only `COMPLETED`. | Live = `COMPLETED` + `FINALIZED` (settled, like the backoffice; `status` is a column, so a dashboard can still filter `COMPLETED`). Slots = `COMPLETED`, `FINALIZED`, `INTERNAL_TRANSACTION` (final-only free-spin wins). |
+| 6 | Live status: the CSV has only `COMPLETED`. | Live = `COMPLETED` + `FINALIZED` + `INTERNAL_TRANSACTION` (live free spins, from 2025-12-05; ~1,000 bets/day), like the backoffice. `status` is a column, so a dashboard can still filter `COMPLETED`. Without them live was 1.6% below `agg_daily` (2026-10-08); with them 62,211 vs 62,221 (the rest = settlement day). Slots = `COMPLETED`, `FINALIZED`, `INTERNAL_TRANSACTION` (final-only free-spin wins). |
 
 ## Validation (ProdCH)
 - **Live vs CSV:** the 101 bets of 8 casinos (incl. partner-less, renamed, Patrianna/Primetech), aggregated to the
@@ -116,7 +116,7 @@ display format), money as `Decimal(38,4)` / `Decimal(38,12)` (Tableau already re
 - Everything runs as `bi_total_eg_definer` (HOST NONE), like Antebet.
 
 Files, in deployment order: `00_cleanup.sql`, `02_history_tables.sql` (user, grants, tables),
-`03_history_mvs_and_view.sql` (MVs + view). `01_recent_days.sql` = the standalone query, `04_validation.sql` = checks.
+`03_history_mvs_and_view.sql` (MVs + view). `01_recent_days.sql` = the standalone query, `04_validation.sql` = checks. `05_fix_live_internal_transaction.sql` = the one-off change of 2026-10-10 for a deployment made before it (`deploy_all.sql` already contains it).
 `01` and `03` are generated from one place, `gen/parts.py` (the live / slot aggregations and the alias layer):
 change a column there and run `cd gen && python3 gen.py ..`.
 

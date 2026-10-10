@@ -56,7 +56,7 @@ def live(where_time):
 FROM platform.bets AS b FINAL
 {PARTNERS.format(a=a)}
 WHERE {where_time.format(a=a)}
-  AND b.status IN ('COMPLETED', 'FINALIZED')                                     -- settled bets
+  AND b.status IN ('COMPLETED', 'FINALIZED', 'INTERNAL_TRANSACTION')             -- settled; INTERNAL_TRANSACTION = live free spins (from 2025-12-05)
 {FILTERS.format(a=a)}
 GROUP BY {GROUP_COMMON}, round_mongo_id, autoplay"""
 

@@ -153,7 +153,7 @@ FROM
         GROUP BY wl_id
     ) AS p ON p.wl_id = b.wlId
     WHERE b.createdAt >= toStartOfDay(now('UTC')) - INTERVAL 3 DAY                   -- the window: last 3 days (UTC)
-      AND b.status IN ('COMPLETED', 'FINALIZED')                                     -- settled bets
+      AND b.status IN ('COMPLETED', 'FINALIZED', 'INTERNAL_TRANSACTION')             -- settled; INTERNAL_TRANSACTION = live free spins (from 2025-12-05)
       AND dictGetOrDefault('platform.whitelabels_d', 'isTest', b.wlId, toUInt8(0)) = 0    -- no test casinos
       AND dictGetOrDefault('platform.currency_d', 'isFun', b.currency, toUInt8(0)) = 0    -- no fun currencies
     GROUP BY hour, wl_id, wl_user_id, player_mongo_id, token_mongo_id, game_id, country, currency, status, free_spins, freespin_transaction_mode, round_mongo_id, autoplay
