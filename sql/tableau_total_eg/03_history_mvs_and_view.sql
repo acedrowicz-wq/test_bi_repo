@@ -144,7 +144,7 @@ WHERE s.createdAt >= toDateTime64(date_from, 6, 'UTC')
   AND s.createdAt <  toDateTime64(date_to + 1, 6, 'UTC')
   AND date_to >= date_from                                                     -- nothing to do = nothing is read
   AND (s.status IN ('COMPLETED', 'FINALIZED', 'INTERNAL_TRANSACTION')            -- settled; INTERNAL_TRANSACTION = final-only free-spin wins
-       OR (s.status = '' AND s.actionName IN ('bonus_init', 'hyperspin_init')))  -- bonus starts: empty status, no money, counted by the workbook's "Spins rounds"
+       OR (s.status = '' AND s.actionName IN ('bonus_init', 'hyperspin_init')))  -- bonus starts: empty status, no money, counted by the workbook calculation Spins rounds
   AND dictGetOrDefault('platform.whitelabels_d', 'isTest', s.wlId, toUInt8(0)) = 0    -- no test casinos
   AND dictGetOrDefault('platform.currency_d', 'isFun', s.currency, toUInt8(0)) = 0    -- no fun currencies
 GROUP BY hour, wl_id, wl_user_id, player_mongo_id, token_mongo_id, game_id, country, currency, status, free_spins, freespin_transaction_mode, action_name
@@ -259,7 +259,7 @@ SELECT * FROM
     ) AS p ON p.wl_id = s.wlId
     WHERE s.createdAt >= toDateTime64(date_from_slots, 6, 'UTC')
       AND (s.status IN ('COMPLETED', 'FINALIZED', 'INTERNAL_TRANSACTION')            -- settled; INTERNAL_TRANSACTION = final-only free-spin wins
-           OR (s.status = '' AND s.actionName IN ('bonus_init', 'hyperspin_init')))  -- bonus starts: empty status, no money, counted by the workbook's "Spins rounds"
+           OR (s.status = '' AND s.actionName IN ('bonus_init', 'hyperspin_init')))  -- bonus starts: empty status, no money, counted by the workbook calculation Spins rounds
       AND dictGetOrDefault('platform.whitelabels_d', 'isTest', s.wlId, toUInt8(0)) = 0    -- no test casinos
       AND dictGetOrDefault('platform.currency_d', 'isFun', s.currency, toUInt8(0)) = 0    -- no fun currencies
     GROUP BY hour, wl_id, wl_user_id, player_mongo_id, token_mongo_id, game_id, country, currency, status, free_spins, freespin_transaction_mode, action_name

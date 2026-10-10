@@ -77,7 +77,7 @@ FROM platform.slot_actions AS s FINAL
 {PARTNERS.format(a=a)}
 WHERE {where_time.format(a=a)}
   AND (s.status IN ('COMPLETED', 'FINALIZED', 'INTERNAL_TRANSACTION')            -- settled; INTERNAL_TRANSACTION = final-only free-spin wins
-       OR (s.status = '' AND s.actionName IN ('bonus_init', 'hyperspin_init')))  -- bonus starts: empty status, no money, counted by the workbook's "Spins rounds"
+       OR (s.status = '' AND s.actionName IN ('bonus_init', 'hyperspin_init')))  -- bonus starts: empty status, no money, counted by the workbook calculation Spins rounds
 {FILTERS.format(a=a)}
 GROUP BY {GROUP_COMMON}, action_name"""
 

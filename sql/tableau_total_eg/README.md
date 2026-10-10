@@ -116,6 +116,8 @@ display format), money as `Decimal(38,4)` / `Decimal(38,12)` (Tableau already re
 - `recent` is cut per product at `max(bet_date)` of the history, so no day is counted twice.
 - Everything runs as `bi_total_eg_definer` (HOST NONE), like Antebet.
 
+Scripts meant to be run in the ProdCH SQL console (`deploy_all.sql`, `07_…`) contain no comments inside the SQL: the console splits a script into statements without understanding comments, and an apostrophe or `;` in a comment cuts a statement in half.
+
 Files, in deployment order: `00_cleanup.sql`, `02_history_tables.sql` (user, grants, tables),
 `03_history_mvs_and_view.sql` (MVs + view). `01_recent_days.sql` = the standalone query, `04_validation.sql` = checks. `05_fix_live_internal_transaction.sql`, `06_fix_view_int_types.sql`, `07_add_spin_mongoid.sql` = one-off changes of 2026-10-10 for a deployment made before them (`deploy_all.sql` already contains them; 07 contains 06).
 `01` and `03` are generated from one place, `gen/parts.py` (the live / slot aggregations and the alias layer):
