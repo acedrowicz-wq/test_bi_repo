@@ -1,102 +1,99 @@
--- Step 2. Operational query: live bets of the LAST 3 DAYS (UTC) with the
--- exact column names of the CSV "Total_EG_datasource" (Tableau).
+-- Step 2. Operational query: the LAST 3 DAYS (UTC), hourly grain, with the exact
+-- column names of the CSV "Total_EG_datasource" (Tableau). Live + Slots.
 --
--- Grain: 1 row = 1 live bet (platform.bets, deduplicated with FINAL).
--- Only the base (physical / row-level) fields are returned. The fields Tableau
--- calculates itself (period flags, parameters, formatted measures, COUNTDs)
--- stay in the workbook - see README.md, "Fields left to Tableau".
+-- Grain (1 row): hour (UTC) x product x casino x game x currency x country x player
+--                x session (tokenMongoId) x status x free-spin context
+--                + live: round (roundMongoId)   + slots: action (actionName).
+-- There is no single-bet information: "mongoId" is the NUMBER OF UNIQUE BETS of the row
+-- (a measure, SUM in Tableau), "Spins rounds" the number of slot rounds (SUM).
+-- COUNTD of players ("wlUserId", "playerMongoId"), sessions ("tokenMongoId") and live
+-- rounds ("roundMongoId") stay exact, because those ids are part of the grain.
+-- Fields Tableau computes itself (period flags, parameters, formatted measures) stay in
+-- the workbook - see README.md.
 --
 -- Requires: bi_sandbox.country_names_d (00_country_names.sql).
---
--- Performance:
---   * platform.bets: PARTITION BY toStartOfMonth(createdAt),
---     ORDER BY (toStartOfHour(createdAt), wlUserId, mongoId)
---     -> the createdAt bound prunes partitions AND granules (1st key column).
---   * FINAL on 3 days = ~250k rows, < 1 s.
---   * dictionaries (dictGet) instead of JOINs; the only JOIN is the 39-row partner list.
+-- Performance: platform.bets and platform.slot_actions are PARTITION BY toStartOfMonth(createdAt),
+-- ORDER BY (toStartOfHour(createdAt), wlUserId, mongoId): the createdAt bound prunes partitions
+-- and granules. Measured on ProdCH: 1 day of slots (22 M actions -> 0.5 M rows) = ~4 s;
+-- live is ~1% of that.
 
-WITH
-    toStartOfDay(now('UTC')) - INTERVAL 3 DAY                                    AS ts_from,   -- change the window here
-    dictGetOrDefault('platform.whitelabels_d', 'name',  b.wlId, b.wlId)          AS wl_name,
-    dictGetOrDefault('platform.whitelabels_d', 'label', b.wlId, '')              AS wl_label,
-    dictGetOrDefault('bi_sandbox.country_names_d', 'name', b.country, b.country) AS country_name
 SELECT
-    CAST(NULL AS Nullable(String))                                      AS "actionName",              -- slot branch, empty for live
-    toStartOfMonth(b.createdAt)                                         AS "Agregated date",          -- Date
-    nullIf(b.autoplay, '')                                              AS "autoplay",
-    toDate(b.createdAt)                                                 AS "Bet_day_date",            -- Date, UTC day
+    nullIf(action_name, '')                                             AS "actionName",
+    toStartOfMonth(bet_date)                                            AS "Agregated date",
+    autoplay                                                            AS "autoplay",
+    bet_date                                                            AS "Bet_day_date",
     CAST(NULL AS Nullable(String))                                      AS "browser",
     CAST(NULL AS Nullable(String))                                      AS "browser_cmd",
     replaceRegexpAll(wl_name, '\\.prod$|-pragmatic|_v1|vegangster1', '') AS "Casino name",
-    b.country                                                           AS "country",
+    country                                                             AS "country",
     CAST(NULL AS Nullable(String))                                      AS "Country Code",
     country_name                                                        AS "Country Name",
+    country_name                                                        AS "Country_name",
     CAST(NULL AS Nullable(DateTime('UTC')))                             AS "Created datetime",
-    toDateTime(toStartOfHour(b.createdAt), 'UTC')                       AS "Created hour",            -- DateTime, UTC
+    hour                                                                AS "Created hour",
     CAST(NULL AS Nullable(DateTime('UTC')))                             AS "createdAt-1",
     CAST(NULL AS Nullable(DateTime('UTC')))                             AS "createdAt-2",
     CAST(NULL AS Nullable(DateTime('UTC')))                             AS "createdAt-3",
-    b.currency                                                          AS "currency",
+    currency                                                            AS "currency",
     CAST(NULL AS Nullable(String))                                      AS "dealer_name",
     CAST(NULL AS Nullable(String))                                      AS "device",
     CAST(NULL AS Nullable(String))                                      AS "device_cmd",
     CAST(NULL AS Nullable(String))                                      AS "dpi_cmd",
-    nullIf(replaceAll(ifNull(toString(b.freeSpins), ''), '\0', ''), '') AS "freeSpins",               -- FixedString padded with \0
-    b.freespinTransactionMode                                           AS "freespinTransactionMode",
-    replaceAll(b.gameId, '_', ' ')                                      AS "Game name",
+    free_spins                                                          AS "freeSpins",
+    freespin_transaction_mode                                           AS "freespinTransactionMode",
+    replaceAll(game_id, '_', ' ')                                       AS "Game name",
     CAST(NULL AS Nullable(String))                                      AS "gameFamily",
-    b.gameId                                                            AS "gameId",
+    game_id                                                             AS "gameId",
     CAST(NULL AS Nullable(String))                                      AS "GameName",
     CAST(NULL AS Nullable(String))                                      AS "iframeResolution_cmd",
     CAST(NULL AS Nullable(String))                                      AS "ip",
     wl_label                                                            AS "label",
-    toString(b.mongoId)                                                 AS "mongoId",                 -- bet id
-    toString(b.playerMongoId)                                           AS "mongoId-2",               -- player id (players.mongoId)
+    bets                                                                AS "mongoId",                 -- MEASURE: number of unique bets (SUM in Tableau)
+    player_mongo_id                                                     AS "mongoId-2",               -- player id
     CAST(NULL AS Nullable(String))                                      AS "mongoId-3",
     CAST(NULL AS Nullable(String))                                      AS "name",
     CAST(NULL AS Nullable(String))                                      AS "os",
     CAST(NULL AS Nullable(String))                                      AS "os_cmd",
-    nullIf(p.partner_name, '')                                          AS "partner_name",
+    partner_name                                                        AS "partner_name",
     CAST(NULL AS Nullable(String))                                      AS "platform_cmd",
-    toString(b.playerMongoId)                                           AS "playerMongoId",
+    player_mongo_id                                                     AS "playerMongoId",
     CAST(NULL AS Nullable(String))                                      AS "playerMongoId-1",
-    'Live'                                                              AS "Product name",
+    product                                                             AS "Product name",            -- Live / Slots
     country_name                                                        AS "real_country",
     country_name                                                        AS "Regions",
     CAST(NULL AS Nullable(String))                                      AS "result",
-    toString(b.roundMongoId)                                            AS "roundMongoId",
-    toDate(b.createdAt)                                                 AS "Scaf date",
+    nullIf(round_mongo_id, '')                                          AS "roundMongoId",            -- live only (COUNTD = live rounds)
+    bet_date                                                            AS "Scaf date",
     CAST(NULL AS Nullable(String))                                      AS "screenResolution_cmd",
     CAST(NULL AS Nullable(String))                                      AS "Session mongo id",
     CAST(NULL AS Nullable(String))                                      AS "Session status",
     CAST(NULL AS Nullable(String))                                      AS "sex",
-    b.status                                                            AS "status",
+    status                                                              AS "status",
     CAST(NULL AS Nullable(String))                                      AS "status-2",
-    -- 1:1 with the old source, INCLUDING its bug: %M = month name in ClickHouse,
-    -- so the "minutes" are 'October'. Warsaw time. Correct format: '%Y-%m-%d %H:%i:%S'.
-    formatDateTime(b.statusUpdatedAt, '%Y-%m-%d %H:%M:%S', 'Europe/Warsaw') AS "statusUpdatedAt_str",
-    b.currency                                                          AS "symbol",
-    'localhost/CHTotalEGoverview2026/sqlproxy'                          AS "Table Names",             -- constants: the old union labels
+    -- latest timestamp of the row, Warsaw time, old source's format incl. its %M (= month name) bug
+    formatDateTime(last_status_updated_at, '%Y-%m-%d %H:%M:%S', 'Europe/Warsaw') AS "statusUpdatedAt_str",
+    currency                                                            AS "symbol",
+    'localhost/CHTotalEGoverview2026/sqlproxy'                          AS "Table Names",
     'localhost/CHJoinedroundsandbets2026/sqlproxy'                      AS "Table Names-1",
     CAST(NULL AS Nullable(String))                                      AS "timeToPlay_cmd",
     CAST(NULL AS Nullable(String))                                      AS "title",
-    dictGetOrDefault('platform.currency_d', 'title', b.currency, '')    AS "Title",
-    toString(b.tokenMongoId)                                            AS "tokenMongoId",
-    dictGetOrDefault('platform.currency_d', 'type', b.currency, '')     AS "Type",                    -- regular / virtual
+    currency_title                                                      AS "Title",
+    token_mongo_id                                                      AS "tokenMongoId",            -- session id (COUNTD = sessions)
+    currency_type                                                       AS "Type",
     CAST(NULL AS Nullable(String))                                      AS "type",
     CAST(NULL AS Nullable(DateTime('UTC')))                             AS "updatedAt-1",
-    formatDateTime(b.updatedAt, '%Y-%m-%d %H:%M:%S', 'Europe/Warsaw')   AS "updatedAt_str",           -- same bug as above
+    formatDateTime(last_updated_at, '%Y-%m-%d %H:%M:%S', 'Europe/Warsaw') AS "updatedAt_str",
     CAST(NULL AS Nullable(String))                                      AS "wl label",
     wl_name                                                             AS "wl name",
-    b.wlId                                                              AS "wlId",
-    b.wlUserId                                                          AS "wlUserId",
+    wl_id                                                               AS "wlId",
+    wl_user_id                                                          AS "wlUserId",
     CAST(NULL AS Nullable(String))                                      AS "wlUserId-2",
     CAST(NULL AS Nullable(Float64))                                     AS "all_rounds",
-    b.betSize                                                           AS "betSize",                 -- Decimal(30,12), player currency
+    bet_size                                                            AS "betSize",                 -- sum, player currency
     CAST(NULL AS Nullable(String))                                      AS "id",
-    toUInt32(toUnixTimestamp(b.createdAt))                              AS "incremental_id",          -- = unix time of createdAt (UTC)
+    toUInt32(toUnixTimestamp(hour))                                     AS "incremental_id",          -- unix time of the hour
     CAST(NULL AS Nullable(UInt8))                                       AS "is_time_empty",
-    dictGetOrDefault('platform.currency_d', 'isFun', b.currency, toUInt8(0)) AS "isFun",
+    is_fun                                                              AS "isFun",
     CAST(NULL AS Nullable(Float64))                                     AS "muted_button_clicks",
     CAST(NULL AS Nullable(Float64))                                     AS "muted_rounds",
     CAST(NULL AS Nullable(Int64))                                       AS "playerId",
@@ -105,34 +102,111 @@ SELECT
     CAST(NULL AS Nullable(String))                                      AS "round_id",
     CAST(NULL AS Nullable(String))                                      AS "roundId",
     CAST(NULL AS Nullable(String))                                      AS "spin mongoId",
-    CAST(NULL AS Nullable(Float64))                                     AS "Spins rounds",
-    b.convertedBet                                                      AS "Sum of bet €",            -- EUR, Decimal(16,4)
-    b.convertedWin                                                      AS "Sum of win €",            -- EUR, Decimal(16,4)
+    slot_rounds                                                         AS "Spins rounds",            -- MEASURE: slot rounds (SUM); NULL for live
+    converted_bet                                                       AS "Sum of bet €",            -- sum, EUR
+    converted_win                                                       AS "Sum of win €",            -- sum, EUR
     CAST(NULL AS Nullable(Float64))                                     AS "timeToEndJoin_in_seconds",
-    dictGetOrDefault('platform.whitelabels_d', 'isTest', b.wlId, toUInt8(0)) AS "wl is test",
-    CAST(NULL AS Nullable(UInt8))                                       AS "wl is test ",             -- trailing space, as in the CSV
-    b.won                                                               AS "won",                     -- Decimal(30,12), player currency
-
-    -- native columns: not in the CSV (hidden fields are not exported by Tableau),
-    -- returned so that calculations referring to hidden base fields keep working
-    b.createdAt                                                         AS "createdAt",
-    b.updatedAt                                                         AS "updatedAt",
-    b.statusUpdatedAt                                                   AS "statusUpdatedAt",
-    b.convertedBet                                                      AS "convertedBet",
-    b.convertedWin                                                      AS "convertedWin",
-    b.roundNumId                                                        AS "roundNumId",
-    b.tenantId                                                          AS "tenantId"
-FROM platform.bets AS b FINAL
-LEFT JOIN
+    wl_is_test                                                          AS "wl is test",
+    CAST(NULL AS Nullable(UInt8))                                       AS "wl is test ",
+    won                                                                 AS "won"                      -- sum, player currency
+FROM
 (
-    -- partner = the partner whose wls list contains the casino (the old source's rule;
-    -- casinos missing from every list get an empty partner, e.g. yaycasinocomna, acornfunna)
-    SELECT arrayJoin(JSONExtract(wls, 'Array(String)')) AS wl_id, any(name) AS partner_name
-    FROM platform.partners_d
-    GROUP BY wl_id
-) AS p ON p.wl_id = b.wlId
-WHERE b.createdAt >= ts_from
-  AND b.status = 'COMPLETED'                                                          -- settled bets only (the CSV has only COMPLETED)
-  AND dictGetOrDefault('platform.whitelabels_d', 'isTest', b.wlId, toUInt8(0)) = 0    -- no test casinos
-  AND dictGetOrDefault('platform.currency_d', 'isFun', b.currency, toUInt8(0)) = 0    -- no fun currencies
-;
+    SELECT
+        'Live'                                                                       AS product,
+        toDateTime(toStartOfHour(b.createdAt), 'UTC')                             AS hour,
+        toDate(hour)                                                                 AS bet_date,
+        b.wlId                                                                     AS wl_id,
+        dictGetOrDefault('platform.whitelabels_d', 'name',   b.wlId, b.wlId)       AS wl_name,
+        dictGetOrDefault('platform.whitelabels_d', 'label',  b.wlId, '')           AS wl_label,
+        dictGetOrDefault('platform.whitelabels_d', 'isTest', b.wlId, toUInt8(0))   AS wl_is_test,
+        nullIf(any(p.partner_name), '')                                              AS partner_name,
+        b.wlUserId                                                                 AS wl_user_id,
+        toString(b.playerMongoId)                                                  AS player_mongo_id,
+        toString(b.tokenMongoId)                                                   AS token_mongo_id,
+        b.gameId                                                                   AS game_id,
+        b.country                                                                  AS country,
+        dictGetOrDefault('bi_sandbox.country_names_d', 'name', b.country, b.country) AS country_name,
+        b.currency                                                                 AS currency,
+        dictGetOrDefault('platform.currency_d', 'title', b.currency, '')           AS currency_title,
+        ifNull(dictGetOrDefault('platform.currency_d', 'type', b.currency, ''), '') AS currency_type,
+        dictGetOrDefault('platform.currency_d', 'isFun', b.currency, toUInt8(0))   AS is_fun,
+        b.status                                                                   AS status,
+        nullIf(replaceAll(ifNull(toString(b.freeSpins), ''), '\0', ''), '')       AS free_spins,
+        b.freespinTransactionMode                                                  AS freespin_transaction_mode,
+        toString(b.roundMongoId)                                                     AS round_mongo_id,   -- live: a round is shared by many players, so it stays in the grain (exact COUNTD of rounds)
+        ''                                                                           AS action_name,
+        nullIf(b.autoplay, '')                                                       AS autoplay,
+        uniqExact(b.mongoId)                                                         AS bets,             -- unique bets
+        CAST(NULL AS Nullable(UInt64))                                               AS slot_rounds,
+        sum(b.betSize)                                                             AS bet_size,
+        sum(b.won)                                                                 AS won,
+        sum(b.convertedBet)                                                        AS converted_bet,
+        sum(b.convertedWin)                                                        AS converted_win,
+        max(b.updatedAt)                                                           AS last_updated_at,
+        max(b.statusUpdatedAt)                                                     AS last_status_updated_at,
+        now()                                                                        AS loaded_at
+    FROM platform.bets AS b FINAL
+    LEFT JOIN
+    (
+        -- partner = the partner whose wls list contains the casino (old source's rule)
+        SELECT arrayJoin(JSONExtract(wls, 'Array(String)')) AS wl_id, any(name) AS partner_name
+        FROM platform.partners_d
+        GROUP BY wl_id
+    ) AS p ON p.wl_id = b.wlId
+    WHERE b.createdAt >= toStartOfDay(now('UTC')) - INTERVAL 3 DAY                   -- the window: last 3 days (UTC)
+      AND b.status IN ('COMPLETED', 'FINALIZED')                                     -- settled bets
+      AND dictGetOrDefault('platform.whitelabels_d', 'isTest', b.wlId, toUInt8(0)) = 0    -- no test casinos
+      AND dictGetOrDefault('platform.currency_d', 'isFun', b.currency, toUInt8(0)) = 0    -- no fun currencies
+    GROUP BY hour, wl_id, wl_user_id, player_mongo_id, token_mongo_id, game_id, country, currency, status, free_spins, freespin_transaction_mode, round_mongo_id, autoplay
+
+    UNION ALL
+
+    SELECT
+        'Slots'                                                                      AS product,
+        toDateTime(toStartOfHour(s.createdAt), 'UTC')                             AS hour,
+        toDate(hour)                                                                 AS bet_date,
+        s.wlId                                                                     AS wl_id,
+        dictGetOrDefault('platform.whitelabels_d', 'name',   s.wlId, s.wlId)       AS wl_name,
+        dictGetOrDefault('platform.whitelabels_d', 'label',  s.wlId, '')           AS wl_label,
+        dictGetOrDefault('platform.whitelabels_d', 'isTest', s.wlId, toUInt8(0))   AS wl_is_test,
+        nullIf(any(p.partner_name), '')                                              AS partner_name,
+        s.wlUserId                                                                 AS wl_user_id,
+        toString(s.playerMongoId)                                                  AS player_mongo_id,
+        toString(s.tokenMongoId)                                                   AS token_mongo_id,
+        s.gameId                                                                   AS game_id,
+        s.country                                                                  AS country,
+        dictGetOrDefault('bi_sandbox.country_names_d', 'name', s.country, s.country) AS country_name,
+        s.currency                                                                 AS currency,
+        dictGetOrDefault('platform.currency_d', 'title', s.currency, '')           AS currency_title,
+        ifNull(dictGetOrDefault('platform.currency_d', 'type', s.currency, ''), '') AS currency_type,
+        dictGetOrDefault('platform.currency_d', 'isFun', s.currency, toUInt8(0))   AS is_fun,
+        s.status                                                                   AS status,
+        nullIf(replaceAll(ifNull(toString(s.freeSpins), ''), '\0', ''), '')       AS free_spins,
+        s.freespinTransactionMode                                                  AS freespin_transaction_mode,
+        ''                                                                           AS round_mongo_id,   -- slots: 1 round = 1 player, counted in slot_rounds
+        s.actionName                                                                 AS action_name,
+        CAST(NULL AS Nullable(String))                                               AS autoplay,
+        uniqExactIf(s.mongoId, s.betSize > 0)                                        AS bets,             -- unique bets = actions with a stake
+        uniqExactIf((s.roundNumId, s.playerMongoId), s.roundStarted = 1)            AS slot_rounds,      -- counted on the starting action only -> summable
+        sum(s.betSize)                                                             AS bet_size,
+        sum(s.won)                                                                 AS won,
+        sum(s.convertedBet)                                                        AS converted_bet,
+        sum(s.convertedWin)                                                        AS converted_win,
+        max(s.updatedAt)                                                           AS last_updated_at,
+        max(s.statusUpdatedAt)                                                     AS last_status_updated_at,
+        now()                                                                        AS loaded_at
+    FROM platform.slot_actions AS s FINAL
+    LEFT JOIN
+    (
+        -- partner = the partner whose wls list contains the casino (old source's rule)
+        SELECT arrayJoin(JSONExtract(wls, 'Array(String)')) AS wl_id, any(name) AS partner_name
+        FROM platform.partners_d
+        GROUP BY wl_id
+    ) AS p ON p.wl_id = s.wlId
+    WHERE s.createdAt >= toStartOfDay(now('UTC')) - INTERVAL 3 DAY                   -- the window: last 3 days (UTC)
+      AND s.status IN ('COMPLETED', 'FINALIZED', 'INTERNAL_TRANSACTION')             -- settled; INTERNAL_TRANSACTION = final-only free-spin wins
+      AND dictGetOrDefault('platform.whitelabels_d', 'isTest', s.wlId, toUInt8(0)) = 0    -- no test casinos
+      AND dictGetOrDefault('platform.currency_d', 'isFun', s.currency, toUInt8(0)) = 0    -- no fun currencies
+    GROUP BY hour, wl_id, wl_user_id, player_mongo_id, token_mongo_id, game_id, country, currency, status, free_spins, freespin_transaction_mode, action_name
+)
+SETTINGS max_bytes_before_external_group_by = 8000000000;
