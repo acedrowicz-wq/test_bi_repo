@@ -78,7 +78,7 @@ WHERE {where_time.format(a=a)}
 {FILTERS.format(a=a)}
 GROUP BY {GROUP_COMMON}, action_name"""
 
-# technical name -> CSV name. One row = one (hour, product, casino, game, currency, country,
+# technical name -> CSV name. Integer measures are Int64: Tableau's ClickHouse driver reads UInt64 as a string. One row = one (hour, product, casino, game, currency, country,
 # player, session[, live round][, slot action], status, free-spin context).
 ALIASES = """    nullIf(action_name, '')                                             AS "actionName",
     toStartOfMonth(bet_date)                                            AS "Agregated date",
@@ -110,7 +110,7 @@ ALIASES = """    nullIf(action_name, '')                                        
     CAST(NULL AS Nullable(String))                                      AS "iframeResolution_cmd",
     CAST(NULL AS Nullable(String))                                      AS "ip",
     wl_label                                                            AS "label",
-    bets                                                                AS "mongoId",                 -- MEASURE: number of unique bets (SUM in Tableau)
+    toInt64(bets)                                                       AS "mongoId",                 -- MEASURE: number of unique bets (SUM in Tableau)
     player_mongo_id                                                     AS "mongoId-2",               -- player id
     CAST(NULL AS Nullable(String))                                      AS "mongoId-3",
     CAST(NULL AS Nullable(String))                                      AS "name",
@@ -153,9 +153,9 @@ ALIASES = """    nullIf(action_name, '')                                        
     CAST(NULL AS Nullable(Float64))                                     AS "all_rounds",
     bet_size                                                            AS "betSize",                 -- sum, player currency
     CAST(NULL AS Nullable(String))                                      AS "id",
-    toUInt32(toUnixTimestamp(hour))                                     AS "incremental_id",          -- unix time of the hour
-    CAST(NULL AS Nullable(UInt8))                                       AS "is_time_empty",
-    is_fun                                                              AS "isFun",
+    toInt64(toUnixTimestamp(hour))                                      AS "incremental_id",          -- unix time of the hour
+    CAST(NULL AS Nullable(Int32))                                       AS "is_time_empty",
+    toInt32(is_fun)                                                     AS "isFun",
     CAST(NULL AS Nullable(Float64))                                     AS "muted_button_clicks",
     CAST(NULL AS Nullable(Float64))                                     AS "muted_rounds",
     CAST(NULL AS Nullable(Int64))                                       AS "playerId",
@@ -164,12 +164,12 @@ ALIASES = """    nullIf(action_name, '')                                        
     CAST(NULL AS Nullable(String))                                      AS "round_id",
     CAST(NULL AS Nullable(String))                                      AS "roundId",
     CAST(NULL AS Nullable(String))                                      AS "spin mongoId",
-    slot_rounds                                                         AS "Spins rounds",            -- MEASURE: slot rounds (SUM); NULL for live
+    toInt64(slot_rounds)                                                AS "Spins rounds",            -- MEASURE: slot rounds (SUM); NULL for live
     converted_bet                                                       AS "Sum of bet €",            -- sum, EUR
     converted_win                                                       AS "Sum of win €",            -- sum, EUR
     CAST(NULL AS Nullable(Float64))                                     AS "timeToEndJoin_in_seconds",
-    wl_is_test                                                          AS "wl is test",
-    CAST(NULL AS Nullable(UInt8))                                       AS "wl is test ",
+    toInt32(wl_is_test)                                                 AS "wl is test",
+    CAST(NULL AS Nullable(Int32))                                       AS "wl is test ",
     won                                                                 AS "won"                      -- sum, player currency"""
 
 
