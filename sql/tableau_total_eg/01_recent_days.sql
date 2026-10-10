@@ -11,7 +11,7 @@
 -- Fields Tableau computes itself (period flags, parameters, formatted measures) stay in
 -- the workbook - see README.md.
 --
--- Requires: bi_sandbox.country_names_d (00_country_names.sql).
+-- Self-contained: no objects needed (country names are inlined with transform()).
 -- Performance: platform.bets and platform.slot_actions are PARTITION BY toStartOfMonth(createdAt),
 -- ORDER BY (toStartOfHour(createdAt), wlUserId, mongoId): the createdAt bound prunes partitions
 -- and granules. Measured on ProdCH: 1 day of slots (22 M actions -> 0.5 M rows) = ~4 s;
@@ -27,8 +27,8 @@ SELECT
     replaceRegexpAll(wl_name, '\\.prod$|-pragmatic|_v1|vegangster1', '') AS "Casino name",
     country                                                             AS "country",
     CAST(NULL AS Nullable(String))                                      AS "Country Code",
-    country_name                                                        AS "Country Name",
-    country_name                                                        AS "Country_name",
+    transform(toString(country), ['AD','AE','AF','AG','AI','AL','AM','AO','AQ','AR','AS','AT','AU','AW','AX','AZ','BA','BB','BD','BE','BF','BG','BH','BI','BJ','BL','BM','BN','BO','BQ','BR','BS','BT','BV','BW','BY','BZ','CA','CC','CD','CF','CG','CH','CI','CK','CL','CM','CN','CO','CR','CU','CV','CW','CX','CY','CZ','DE','DJ','DK','DM','DO','DZ','EC','EE','EG','EH','ER','ES','ET','FI','FJ','FK','FM','FO','FR','GA','GB','GD','GE','GF','GG','GH','GI','GL','GM','GN','GP','GQ','GR','GS','GT','GU','GW','GY','HK','HM','HN','HR','HT','HU','ID','IE','IL','IM','IN','IO','IQ','IR','IS','IT','JE','JM','JO','JP','KE','KG','KH','KI','KM','KN','KP','KR','KW','KY','KZ','LA','LB','LC','LI','LK','LR','LS','LT','LU','LV','LY','MA','MC','MD','ME','MF','MG','MH','MK','ML','MM','MN','MO','MP','MQ','MR','MS','MT','MU','MV','MW','MX','MY','MZ','NA','NC','NE','NF','NG','NI','NL','NO','NP','NR','NU','NZ','OM','PA','PE','PF','PG','PH','PK','PL','PM','PN','PR','PS','PT','PW','PY','QA','RE','RO','RS','RU','RW','SA','SB','SC','SD','SE','SG','SH','SI','SJ','SK','SL','SM','SN','SO','SR','SS','ST','SV','SX','SY','SZ','TC','TD','TF','TG','TH','TJ','TK','TL','TM','TN','TO','TR','TT','TV','TW','TZ','UA','UG','UM','US','UY','UZ','VA','VC','VE','VG','VI','VN','VU','WF','WS','YE','YT','ZA','ZM','ZW'], ['Andorra','United Arab Emirates','Afghanistan','Antigua and Barbuda','Anguilla','Albania','Armenia','Angola','Antarctica','Argentina','American Samoa','Austria','Australia','Aruba','Åland Islands','Azerbaijan','Bosnia and Herzegovina','Barbados','Bangladesh','Belgium','Burkina Faso','Bulgaria','Bahrain','Burundi','Benin','Saint Barthélemy','Bermuda','Brunei Darussalam','Bolivia (Plurinational State of)','Bonaire Sint Eustatius and Saba','Brazil','Bahamas','Bhutan','Bouvet Island','Botswana','Belarus','Belize','Canada','Cocos (Keeling) Islands','Congo Democratic Republic of the','Central African Republic','Congo','Switzerland','Côte d''Ivoire','Cook Islands','Chile','Cameroon','China','Colombia','Costa Rica','Cuba','Cabo Verde','Curaçao','Christmas Island','Cyprus','Czechia','Germany','Djibouti','Denmark','Dominica','Dominican Republic','Algeria','Ecuador','Estonia','Egypt','Western Sahara','Eritrea','Spain','Ethiopia','Finland','Fiji','Falkland Islands (Malvinas)','Micronesia (Federated States of)','Faroe Islands','France','Gabon','United Kingdom of Great Britain and Northern Ireland','Grenada','Georgia','French Guiana','Guernsey','Ghana','Gibraltar','Greenland','Gambia','Guinea','Guadeloupe','Equatorial Guinea','Greece','South Georgia and the South Sandwich Islands','Guatemala','Guam','Guinea-Bissau','Guyana','Hong Kong','Heard Island and McDonald Islands','Honduras','Croatia','Haiti','Hungary','Indonesia','Ireland','Israel','Isle of Man','India','British Indian Ocean Territory','Iraq','Iran (Islamic Republic of)','Iceland','Italy','Jersey','Jamaica','Jordan','Japan','Kenya','Kyrgyzstan','Cambodia','Kiribati','Comoros','Saint Kitts and Nevis','Korea (Democratic People''s Republic of)','Korea Republic of','Kuwait','Cayman Islands','Kazakhstan','Lao People''s Democratic Republic','Lebanon','Saint Lucia','Liechtenstein','Sri Lanka','Liberia','Lesotho','Lithuania','Luxembourg','Latvia','Libya','Morocco','Monaco','Moldova Republic of','Montenegro','Saint Martin (French part)','Madagascar','Marshall Islands','North Macedonia','Mali','Myanmar','Mongolia','Macao','Northern Mariana Islands','Martinique','Mauritania','Montserrat','Malta','Mauritius','Maldives','Malawi','Mexico','Malaysia','Mozambique','Namibia','New Caledonia','Niger','Norfolk Island','Nigeria','Nicaragua','Netherlands','Norway','Nepal','Nauru','Niue','New Zealand','Oman','Panama','Peru','French Polynesia','Papua New Guinea','Philippines','Pakistan','Poland','Saint Pierre and Miquelon','Pitcairn','Puerto Rico','Palestine State of','Portugal','Palau','Paraguay','Qatar','Réunion','Romania','Serbia','Russian Federation','Rwanda','Saudi Arabia','Solomon Islands','Seychelles','Sudan','Sweden','Singapore','Saint Helena Ascension and Tristan da Cunha','Slovenia','Svalbard and Jan Mayen','Slovakia','Sierra Leone','San Marino','Senegal','Somalia','Suriname','South Sudan','Sao Tome and Principe','El Salvador','Sint Maarten (Dutch part)','Syrian Arab Republic','Eswatini','Turks and Caicos Islands','Chad','French Southern Territories','Togo','Thailand','Tajikistan','Tokelau','Timor-Leste','Turkmenistan','Tunisia','Tonga','Turkey','Trinidad and Tobago','Tuvalu','Taiwan Province of China','Tanzania United Republic of','Ukraine','Uganda','United States Minor Outlying Islands','United States of America','Uruguay','Uzbekistan','Holy See','Saint Vincent and the Grenadines','Venezuela (Bolivarian Republic of)','Virgin Islands (British)','Virgin Islands (U.S.)','Viet Nam','Vanuatu','Wallis and Futuna','Samoa','Yemen','Mayotte','South Africa','Zambia','Zimbabwe'], toString(country)) AS "Country Name",   -- unknown code -> the code
+    "Country Name"                                                      AS "Country_name",
     CAST(NULL AS Nullable(DateTime('UTC')))                             AS "Created datetime",
     hour                                                                AS "Created hour",
     CAST(NULL AS Nullable(DateTime('UTC')))                             AS "createdAt-1",
@@ -59,8 +59,8 @@ SELECT
     player_mongo_id                                                     AS "playerMongoId",
     CAST(NULL AS Nullable(String))                                      AS "playerMongoId-1",
     product                                                             AS "Product name",            -- Live / Slots
-    country_name                                                        AS "real_country",
-    country_name                                                        AS "Regions",
+    "Country Name"                                                      AS "real_country",
+    "Country Name"                                                      AS "Regions",
     CAST(NULL AS Nullable(String))                                      AS "result",
     nullIf(round_mongo_id, '')                                          AS "roundMongoId",            -- live only (COUNTD = live rounds)
     bet_date                                                            AS "Scaf date",
@@ -125,7 +125,6 @@ FROM
         toString(b.tokenMongoId)                                                   AS token_mongo_id,
         b.gameId                                                                   AS game_id,
         b.country                                                                  AS country,
-        dictGetOrDefault('bi_sandbox.country_names_d', 'name', b.country, b.country) AS country_name,
         b.currency                                                                 AS currency,
         dictGetOrDefault('platform.currency_d', 'title', b.currency, '')           AS currency_title,
         ifNull(dictGetOrDefault('platform.currency_d', 'type', b.currency, ''), '') AS currency_type,
@@ -175,7 +174,6 @@ FROM
         toString(s.tokenMongoId)                                                   AS token_mongo_id,
         s.gameId                                                                   AS game_id,
         s.country                                                                  AS country,
-        dictGetOrDefault('bi_sandbox.country_names_d', 'name', s.country, s.country) AS country_name,
         s.currency                                                                 AS currency,
         dictGetOrDefault('platform.currency_d', 'title', s.currency, '')           AS currency_title,
         ifNull(dictGetOrDefault('platform.currency_d', 'type', s.currency, ''), '') AS currency_type,

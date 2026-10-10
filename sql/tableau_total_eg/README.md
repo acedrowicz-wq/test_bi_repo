@@ -61,12 +61,12 @@ Without `actionName` the slot rows would drop to ~0.28 M / day, and without the 
 ## KROK 1: column mapping (CSV → ClickHouse)
 Sources: `platform.bets` FINAL (Live), `platform.slot_actions` FINAL (Slots), dictionaries
 `platform.whitelabels_d`, `platform.currency_d`, `platform.partners_d` (via `wls`), and
-`bi_sandbox.country_names_d` (new, `00_country_names.sql`). The full expression of every column is in
+country names inlined with `transform()` in the alias layer (ISO 3166-1, see `gen/parts.py`). The full expression of every column is in
 `01_recent_days.sql` (alias layer at the top, the same as in the view).
 
 | Kind | CSV columns |
 |---|---|
-| **From ClickHouse** (dimensions) | `Agregated date` (month), `Bet_day_date`, `Scaf date` (UTC day), `Created hour`, `Casino name` (`wl.name` without `.prod`, `-pragmatic`, `_v1`, `vegangster1`, reproduces all 61 CSV values), `wl name`, `label`, `wlId`, `wl is test`, `partner_name`, `wlUserId`, `playerMongoId`, `mongoId-2`, `tokenMongoId`, `roundMongoId` (live), `actionName` (slots), `gameId`, `Game name` (`gameId` with spaces), `country`, `Country Name` / `Country_name` / `real_country` / `Regions` (dictionary), `currency`, `symbol`, `Title`, `Type`, `isFun`, `status`, `autoplay` (live), `freeSpins`, `freespinTransactionMode`, `Product name` (Live / Slots), `updatedAt_str`, `statusUpdatedAt_str`, `incremental_id`, `Table Names`, `Table Names-1` (constants) |
+| **From ClickHouse** (dimensions) | `Agregated date` (month), `Bet_day_date`, `Scaf date` (UTC day), `Created hour`, `Casino name` (`wl.name` without `.prod`, `-pragmatic`, `_v1`, `vegangster1`, reproduces all 61 CSV values), `wl name`, `label`, `wlId`, `wl is test`, `partner_name`, `wlUserId`, `playerMongoId`, `mongoId-2`, `tokenMongoId`, `roundMongoId` (live), `actionName` (slots), `gameId`, `Game name` (`gameId` with spaces), `country`, `Country Name` / `Country_name` / `real_country` / `Regions` (ISO name via `transform()`), `currency`, `symbol`, `Title`, `Type`, `isFun`, `status`, `autoplay` (live), `freeSpins`, `freespinTransactionMode`, `Product name` (Live / Slots), `updatedAt_str`, `statusUpdatedAt_str`, `incremental_id`, `Table Names`, `Table Names-1` (constants) |
 | **From ClickHouse** (measures) | `mongoId` (number of bets), `Spins rounds`, `betSize`, `won`, `Sum of bet €`, `Sum of win €` |
 | **Typed NULL** (empty in the CSV, no source in ClickHouse) | `browser`, `browser_cmd`, `Country Code`, `Created datetime`, `createdAt-1..3`, `dealer_name`, `device`, `device_cmd`, `dpi_cmd`, `gameFamily`, `GameName`, `iframeResolution_cmd`, `ip`, `mongoId-3`, `name`, `os`, `os_cmd`, `platform_cmd`, `playerMongoId-1`, `result`, `screenResolution_cmd`, `Session mongo id`, `Session status`, `sex`, `status-2`, `timeToPlay_cmd`, `title`, `type`, `updatedAt-1`, `wl label`, `wlUserId-2`, `all_rounds`, `id`, `is_time_empty`, `muted_button_clicks`, `muted_rounds`, `playerId`, `playerId-1`, `playerId-2`, `round_id`, `roundId`, `spin mongoId`, `timeToEndJoin_in_seconds`, `wl is test ` (trailing space) |
 | **Tableau calculations** (not in the SQL) | `Anchor Filter (last 6 month)`, `Is current period?`, `Is previous period?`, `Last month`, `Not today`, `Previous month`, `current quarter Filter`, `Days in a Quarter`, `Day of Month of Date`, `Choose measure`, `Choose measure 2`, every `… (parameter control)`, `AvBet`, `AvRnds`, `Bets `, `GGR`, `GGR per player`, `Players`, `Unique users`, `Rounds`, `Rounds live`, `RTP`, `1`, `Games Family` (a group: "Other"), `KAM agregation` (a group over `Casino name`) |
@@ -85,7 +85,7 @@ display format), money as `Decimal(38,4)` / `Decimal(38,12)` (Tableau already re
   alias layer with the same name.
 
 ## KROK 2: operational query, last 3 days
-`01_recent_days.sql`: a self-contained query (needs only `00`) on `platform.bets FINAL` +
+`01_recent_days.sql`: a self-contained query (needs no objects) on `platform.bets FINAL` +
 `platform.slot_actions FINAL`, window `createdAt >= toStartOfDay(now('UTC')) - INTERVAL 3 DAY`.
 `createdAt` bounds the partition (`toStartOfMonth(createdAt)`) and the first sorting-key column
 (`toStartOfHour(createdAt)`) of both tables. ~4 s per day of slots, live is negligible.
@@ -115,7 +115,7 @@ display format), money as `Decimal(38,4)` / `Decimal(38,12)` (Tableau already re
 - `recent` is cut per product at `max(bet_date)` of the history, so no day is counted twice.
 - Everything runs as `bi_total_eg_definer` (HOST NONE), like Antebet.
 
-Files, in deployment order: `00_country_names.sql`, `02_history_tables.sql` (user, grants, tables),
+Files, in deployment order: `00_cleanup.sql`, `02_history_tables.sql` (user, grants, tables),
 `03_history_mvs_and_view.sql` (MVs + view). `01_recent_days.sql` = the standalone query, `04_validation.sql` = checks.
 `01` and `03` are generated from one place, `gen/parts.py` (the live / slot aggregations and the alias layer):
 change a column there and run `cd gen && python3 gen.py ..`.

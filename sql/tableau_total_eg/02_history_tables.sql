@@ -29,7 +29,6 @@ GRANT SELECT  ON platform.partners_d         TO bi_total_eg_definer;   -- read a
 GRANT dictGet ON platform.partners_d         TO bi_total_eg_definer;
 GRANT dictGet ON platform.whitelabels_d      TO bi_total_eg_definer;
 GRANT dictGet ON platform.currency_d         TO bi_total_eg_definer;
-GRANT dictGet ON bi_sandbox.country_names_d  TO bi_total_eg_definer;
 -- CREATE/DROP TABLE: a refresh without APPEND builds a temporary table and swaps it
 GRANT SELECT, INSERT, CREATE TABLE, DROP TABLE, TRUNCATE ON bi_sandbox.* TO bi_total_eg_definer;
 
@@ -53,7 +52,6 @@ CREATE TABLE IF NOT EXISTS bi_sandbox.bi_total_eg_hourly
 
     game_id                    LowCardinality(String),
     country                    LowCardinality(String),
-    country_name               LowCardinality(String),
 
     currency                   LowCardinality(String),
     currency_title             LowCardinality(String),
