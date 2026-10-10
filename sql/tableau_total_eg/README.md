@@ -12,7 +12,8 @@ Tableau reads one view: **`bi_sandbox.bi_total_eg_v`**, with the CSV's column na
 | CSV column | Meaning in the hourly source | In Tableau |
 |---|---|---|
 | `mongoId` | **number of unique bets** in the row (Live: bets; Slots: actions with a stake) | `SUM([mongoId])` (was `COUNTD([mongoId])` on the bet-level CSV) |
-| `Spins rounds` | number of slot rounds (counted on the round's starting action, so it adds up exactly); NULL for Live | `SUM([Spins rounds])` |
+| `spin mongoId` | **number of unique slot actions** in the row (all actions, incl. the bonus starts `bonus_init` / `hyperspin_init`); NULL for Live | `SUM([spin mongoId])`; the workbook's `Spins rounds` = `SUM(CASE [actionName] WHEN 'spin' / 'buy_spin' / 'bonus_init' / 'hyperspin_init' THEN [spin mongoId] END)` (2026-10-09: 21,363,898) |
+| `slot_rounds` | slot rounds started (counted on the starting action, adds up exactly; = backoffice); NULL for Live. Not named `Spins rounds`: that is a workbook calculation | `SUM([slot_rounds])` |
 | `roundMongoId` | the live round (a live round is shared by many players, so it has to stay in the grain); NULL for Slots | `COUNTD([roundMongoId])` = live rounds, exact |
 | `wlUserId`, `playerMongoId`, `mongoId-2` | player | `COUNTD` exact (the player is in the grain) |
 | `tokenMongoId` | session | `COUNTD` exact |
@@ -76,9 +77,9 @@ display format), money as `Decimal(38,4)` / `Decimal(38,12)` (Tableau already re
 `bi_antebet_report_v`), `*_str` stay strings on purpose (finding #3).
 
 ### What has to change in the workbook
-- Every calculation that counts bets with `COUNTD([mongoId])` / `COUNT([mongoId])` → **`SUM([mongoId])`**.
-- Slot rounds: `SUM([Spins rounds])`. Live rounds stay `COUNTD([roundMongoId])`. If `Rounds` should be
-  both: `COUNTD([roundMongoId]) + SUM([Spins rounds])`.
+- Every calculation that counts bets with `COUNTD([mongoId])` / `COUNT([mongoId])` → **`SUM([mongoId])`** (`COUNT` now counts rows, not bets).
+- `[spin mongoId 1]` (the old source's field) → *Replace References* with **`[spin mongoId]`**; the formulas stay as they are.
+- Slot rounds: the workbook's `Spins rounds` calculation on `[spin mongoId]`, or `SUM([slot_rounds])` for rounds started only. Live rounds stay `COUNTD([roundMongoId])`.
 - Averages "per bet" (e.g. `AvBet`) = `SUM([Sum of bet €]) / SUM([mongoId])`, not `AVG(...)`.
 - Players / sessions (`COUNTD([wlUserId])`, `COUNTD([tokenMongoId])`) do not change.
 - If a field turns red after *Replace Data Source*, it was a base field of the old source: add it to the
@@ -116,7 +117,7 @@ display format), money as `Decimal(38,4)` / `Decimal(38,12)` (Tableau already re
 - Everything runs as `bi_total_eg_definer` (HOST NONE), like Antebet.
 
 Files, in deployment order: `00_cleanup.sql`, `02_history_tables.sql` (user, grants, tables),
-`03_history_mvs_and_view.sql` (MVs + view). `01_recent_days.sql` = the standalone query, `04_validation.sql` = checks. `05_fix_live_internal_transaction.sql` = the one-off change of 2026-10-10 for a deployment made before it (`deploy_all.sql` already contains it).
+`03_history_mvs_and_view.sql` (MVs + view). `01_recent_days.sql` = the standalone query, `04_validation.sql` = checks. `05_fix_live_internal_transaction.sql`, `06_fix_view_int_types.sql`, `07_add_spin_mongoid.sql` = one-off changes of 2026-10-10 for a deployment made before them (`deploy_all.sql` already contains them; 07 contains 06).
 `01` and `03` are generated from one place, `gen/parts.py` (the live / slot aggregations and the alias layer):
 change a column there and run `cd gen && python3 gen.py ..`.
 

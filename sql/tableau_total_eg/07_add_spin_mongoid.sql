@@ -1,29 +1,25 @@
--- Step 3b. Loading (refreshable MVs) and the view Tableau connects to.
--- Requires 00_cleanup.sql and 02_history_tables.sql.
---
--- Why refreshable MVs and not incremental MVs on the fact tables:
---   * platform.bets / platform.slot_actions are ReplacingMergeTree tables fed by PeerDB:
---     every status change inserts a new version of the row, so an incremental MV would
---     aggregate every version (double counting) and would sit on the production insert path
---     (an MV error = stalled replication).
---   * a refreshable MV reads the facts with FINAL on its own schedule, decoupled from inserts.
---
--- | What                                   | Object                        | How often                                      |
--- |----------------------------------------|-------------------------------|------------------------------------------------|
--- | Live history + closed days (<= today-2)| bi_total_eg_live_mv           | every 5 min, 92 days per run (~15 runs)        |
--- | Slot history + closed days (<= today-2)| bi_total_eg_slots_mv          | every 1 min, 3 days per run (~240 runs = ~4 h) |
--- |   both -> bi_total_eg_hourly (APPEND)  |                               | then +1 day per product after UTC midnight     |
--- | open days (today-1, today), both       | bi_total_eg_recent_mv         | every 15 min, atomic full replace              |
--- |   -> bi_total_eg_hourly_recent         |                               |                                                |
--- | Tableau                                | bi_total_eg_v (view)          | live                                           |
---
--- First day with real-money activity (agg_daily, non-test, non-fun): live 2022-12-19,
--- slots 2024-10-29, no gaps in slots and one 1-day gap in live (2023-01-22): no chunk is
--- ever empty, so the "continue from max(bet_date)" logic cannot stall.
+-- Step 7 (2026-10-10). "spin mongoId" = number of unique slot actions in the row (the old source's base
+-- field behind the workbook's "Spins rounds" / "[spin mongoId 1]"), incl. the bonus starts bonus_init /
+-- hyperspin_init (empty status, no money). The view column "Spins rounds" is renamed to "slot_rounds":
+-- "Spins rounds" is a workbook calculation and the same name in the source clashed with it.
+-- Live is not reloaded; the slot history is reloaded from 2024-10-29 (~4 h). Run top to bottom in the
+-- ProdCH SQL console. Contains the Int64 view of 06, so 06 is not needed if it was not run.
 
--- ---------------------------------------------------------------------
--- 1a. Live history + closed days -> bi_total_eg_hourly. One run = ~92 days (~5.8 M bets).
--- ---------------------------------------------------------------------
+-- 1. stop the MVs
+DROP VIEW IF EXISTS bi_sandbox.bi_total_eg_slots_mv;
+DROP VIEW IF EXISTS bi_sandbox.bi_total_eg_recent_mv;
+DROP VIEW IF EXISTS bi_sandbox.bi_total_eg_live_mv;
+
+-- 2. the new column, in both tables at the same position (the view reads them with UNION ALL)
+ALTER TABLE bi_sandbox.bi_total_eg_hourly        ADD COLUMN IF NOT EXISTS actions Nullable(UInt64) AFTER slot_rounds;
+ALTER TABLE bi_sandbox.bi_total_eg_hourly_recent ADD COLUMN IF NOT EXISTS actions Nullable(UInt64) AFTER slot_rounds;
+
+-- 3. remove the slot rows (they have no action count); waits until done. Live rows stay (actions = NULL).
+ALTER TABLE bi_sandbox.bi_total_eg_hourly
+    DELETE WHERE product = 'Slots'
+    SETTINGS mutations_sync = 2;
+
+-- 4. the MVs (same as 03_history_mvs_and_view.sql); live continues where it was, slots start again
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_total_eg_live_mv
 REFRESH EVERY 5 MINUTE
 APPEND TO bi_sandbox.bi_total_eg_hourly
@@ -71,7 +67,6 @@ SELECT
 FROM platform.bets AS b FINAL
 LEFT JOIN
 (
-    -- partner = the partner whose wls list contains the casino (old source's rule)
     SELECT arrayJoin(JSONExtract(wls, 'Array(String)')) AS wl_id, any(name) AS partner_name
     FROM platform.partners_d
     GROUP BY wl_id
@@ -85,9 +80,6 @@ WHERE b.createdAt >= toDateTime64(date_from, 6, 'UTC')
 GROUP BY hour, wl_id, wl_user_id, player_mongo_id, token_mongo_id, game_id, country, currency, status, free_spins, freespin_transaction_mode, round_mongo_id, autoplay
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
--- ---------------------------------------------------------------------
--- 1b. Slot history + closed days -> bi_total_eg_hourly. One run = 3 days (~66 M actions, ~12 s).
--- ---------------------------------------------------------------------
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_total_eg_slots_mv
 REFRESH EVERY 1 MINUTE
 APPEND TO bi_sandbox.bi_total_eg_hourly
@@ -135,7 +127,6 @@ SELECT
 FROM platform.slot_actions AS s FINAL
 LEFT JOIN
 (
-    -- partner = the partner whose wls list contains the casino (old source's rule)
     SELECT arrayJoin(JSONExtract(wls, 'Array(String)')) AS wl_id, any(name) AS partner_name
     FROM platform.partners_d
     GROUP BY wl_id
@@ -150,10 +141,6 @@ WHERE s.createdAt >= toDateTime64(date_from, 6, 'UTC')
 GROUP BY hour, wl_id, wl_user_id, player_mongo_id, token_mongo_id, game_id, country, currency, status, free_spins, freespin_transaction_mode, action_name
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
--- ---------------------------------------------------------------------
--- 2. Open days, both products -> bi_total_eg_hourly_recent (full replace, atomic swap).
---    Per product: everything after its last closed day (at most the last 3 days).
--- ---------------------------------------------------------------------
 CREATE MATERIALIZED VIEW IF NOT EXISTS bi_sandbox.bi_total_eg_recent_mv
 REFRESH EVERY 15 MINUTE
 TO bi_sandbox.bi_total_eg_hourly_recent
@@ -202,7 +189,6 @@ SELECT * FROM
     FROM platform.bets AS b FINAL
     LEFT JOIN
     (
-        -- partner = the partner whose wls list contains the casino (old source's rule)
         SELECT arrayJoin(JSONExtract(wls, 'Array(String)')) AS wl_id, any(name) AS partner_name
         FROM platform.partners_d
         GROUP BY wl_id
@@ -252,7 +238,6 @@ SELECT * FROM
     FROM platform.slot_actions AS s FINAL
     LEFT JOIN
     (
-        -- partner = the partner whose wls list contains the casino (old source's rule)
         SELECT arrayJoin(JSONExtract(wls, 'Array(String)')) AS wl_id, any(name) AS partner_name
         FROM platform.partners_d
         GROUP BY wl_id
@@ -266,12 +251,7 @@ SELECT * FROM
 )
 SETTINGS max_bytes_before_external_group_by = 8000000000;
 
--- ---------------------------------------------------------------------
--- 3. The view for Tableau: history + open days, with the CSV column names
---    (same alias layer as 01_recent_days.sql). `recent` is cut per product at
---    max(bet_date) of the history, so a day that was just appended is never
---    counted twice (the MVs run independently).
--- ---------------------------------------------------------------------
+-- 5. the view
 CREATE OR REPLACE VIEW bi_sandbox.bi_total_eg_v
 AS
 WITH
@@ -330,7 +310,6 @@ SELECT
     CAST(NULL AS Nullable(String))                                      AS "sex",
     status                                                              AS "status",
     CAST(NULL AS Nullable(String))                                      AS "status-2",
-    -- latest timestamp of the row, Warsaw time, old source's format incl. its %M (= month name) bug
     formatDateTime(last_status_updated_at, '%Y-%m-%d %H:%M:%S', 'Europe/Warsaw') AS "statusUpdatedAt_str",
     currency                                                            AS "symbol",
     'localhost/CHTotalEGoverview2026/sqlproxy'                          AS "Table Names",
@@ -376,3 +355,9 @@ FROM
     SELECT * FROM bi_sandbox.bi_total_eg_hourly_recent
     WHERE bet_date > if(product = 'Live', hist_max_live, hist_max_slots)
 );
+
+-- 6. check
+SELECT view, status, last_success_time, exception
+FROM system.view_refreshes WHERE database = 'bi_sandbox' AND view LIKE 'bi_total_eg%';
+SELECT name, type FROM system.columns
+WHERE database = 'bi_sandbox' AND table = 'bi_total_eg_v' AND name IN ('mongoId', 'spin mongoId', 'slot_rounds', 'Spins rounds');

@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS bi_sandbox.bi_total_eg_hourly
 
     bets                       UInt64,                              -- unique bets
     slot_rounds                Nullable(UInt64),                    -- slot rounds (counted on the starting action); NULL for live
+    actions                    Nullable(UInt64),                    -- unique slot actions; NULL for live
     bet_size                   Decimal(38, 12),                     -- sum, player currency
     won                        Decimal(38, 12),                     -- sum, player currency
     converted_bet              Decimal(38, 4),                      -- sum, EUR
