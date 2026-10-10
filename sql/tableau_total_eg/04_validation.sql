@@ -51,7 +51,7 @@ FROM bi_sandbox.bi_total_eg_v
 WHERE "Bet_day_date" = '2026-10-09' AND "gameId" = 'phoenix_roulette' AND "status" = 'COMPLETED';
 
 -- 6. Slot rounds add up (expected: equal)
-SELECT sum("Spins rounds") AS summed,
+SELECT sum("slot_rounds") AS summed,
        (SELECT uniqExact(roundNumId, playerMongoId) FROM platform.slot_actions
         WHERE createdAt >= toDateTime64(today() - 2, 6, 'UTC') AND createdAt < toDateTime64(today() - 1, 6, 'UTC')
           AND roundStarted = 1 AND status IN ('COMPLETED', 'FINALIZED', 'INTERNAL_TRANSACTION')
